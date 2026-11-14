@@ -1,0 +1,3464 @@
+<!doctype html>
+<html lang="es" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KeyForge Web: 3D Key Generator</title>
+    <meta
+      name="description"
+      content="Generador paramétrico y por visión por computador de modelos 3D de llaves en el navegador."
+    />
+    <meta property="og:title" content="KeyForge Web: 3D Key Generator" />
+    <meta
+      property="og:description"
+      content="Generador paramétrico y por visión por computador de modelos 3D de llaves en el navegador."
+    />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" type="image/png" href="./assets/aistudio/icono_81a3db5b.png" />
+
+    <!-- Tipografía técnica limpia (Display + Cuerpo + Monoespaciada) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- [1. SECCIÓN UI / TAILWIND CSS] -->
+    <!-- Tailwind CSS vía CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+              display: ['"Outfit"', 'system-ui', 'sans-serif'],
+              mono: ['"JetBrains Mono"', 'monospace'],
+            },
+          },
+        },
+      };
+    </script>
+
+    <style>
+      .viewer-grid {
+        background-color: #111827;
+        background-image:
+          linear-gradient(to right, rgba(34, 211, 238, 0.06) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(34, 211, 238, 0.06) 1px, transparent 1px);
+        background-size: 32px 32px;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
+        }
+      }
+    </style>
+
+    <!-- [INICIO LÓGICA OPENCV.JS - Configuración y carga asíncrona] -->
+    <script>
+      window.extractedProfile2D = [];
+
+      window.Module = {
+        onRuntimeInitialized: function () {
+          if (typeof window.__notifyOpenCvReady === 'function') {
+            window.__notifyOpenCvReady();
+          }
+        },
+      };
+
+      function onOpenCvScriptLoad() {
+        if (typeof window.cv === 'undefined') return;
+
+        // Compatibilidad con builds basados en Promesa o con inicialización asíncrona WASM
+        if (typeof window.cv.then === 'function') {
+          window.cv.then(function (resolvedCv) {
+            window.cv = resolvedCv;
+            if (typeof window.__notifyOpenCvReady === 'function') {
+              window.__notifyOpenCvReady();
+            }
+          });
+        } else if (typeof window.cv.Mat === 'function') {
+          if (typeof window.__notifyOpenCvReady === 'function') {
+            window.__notifyOpenCvReady();
+          }
+        } else {
+          window.cv.onRuntimeInitialized = function () {
+            if (typeof window.__notifyOpenCvReady === 'function') {
+              window.__notifyOpenCvReady();
+            }
+          };
+        }
+      }
+
+      function onOpenCvScriptError() {
+        if (typeof window.__notifyOpenCvError === 'function') {
+          window.__notifyOpenCvError();
+        }
+      }
+    </script>
+    <script
+      async
+      src="https://docs.opencv.org/4.x/opencv.js"
+      onload="onOpenCvScriptLoad()"
+      onerror="onOpenCvScriptError()"
+    ></script>
+    <!-- [FIN LÓGICA OPENCV.JS - Configuración y carga asíncrona] -->
+
+    <!-- [4. SECCIÓN MOTOR THREE.JS - Dependencias r128 vía CDN] -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/STLExporter.js"></script>
+    <script type="module">
+      import { CSG } from 'https://esm.sh/three-csg-ts@3.2.0?deps=three@0.128.0';
+      window.CSG = CSG;
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+  </head>
+
+  <body class="min-h-screen bg-gray-900 text-gray-200 font-sans antialiased selection:bg-cyan-500/30 selection:text-cyan-200">
+    <div class="min-h-screen flex flex-col">
+      <!-- Header principal -->
+      <header class="border-b border-gray-800 bg-gray-900/95">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-4 sm:gap-8">
+          <div class="flex items-center gap-4 min-w-0">
+            <a
+              href="https://www.unfantasmaenelsistema.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Visitar Un Fantasma en el Sistema"
+              class="shrink-0 block rounded-xl bg-white/95 p-1.5 ring-1 ring-gray-700 hover:ring-cyan-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+            >
+              <img
+                src="./assets/aistudio/icono_81a3db5b.png"
+                alt="Logo de Un Fantasma en el Sistema"
+                class="w-11 h-11 sm:w-12 sm:h-12 object-contain block"
+                referrerpolicy="no-referrer"
+              />
+            </a>
+            <div class="min-w-0">
+              <h1 class="font-display text-xl sm:text-2xl font-bold tracking-tight text-gray-100 leading-tight">
+                KeyForge Web: 3D Key Generator
+              </h1>
+              <p class="text-sm text-cyan-400 font-medium mt-0.5">
+                Modo Dual: Visión y Paramétrico
+              </p>
+            </div>
+          </div>
+
+          <nav aria-label="Enlace externo" class="shrink-0">
+            <a
+              href="https://www.unfantasmaenelsistema.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex items-center gap-2 text-sm font-medium text-gray-300 hover:text-cyan-400 underline-offset-4 hover:underline transition-colors whitespace-nowrap shrink-0 py-2 px-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+            >
+              <span>unfantasmaenelsistema.com</span>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                class="w-4 h-4 shrink-0"
+                aria-hidden="true"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M4.25 5.5a.75.75 0 0 0-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75v-4a.75.75 0 0 1 1.5 0v4A2.25 2.25 0 0 1 12.75 17h-8.5A2.25 2.25 0 0 1 2 14.75v-8.5A2.25 2.25 0 0 1 4.25 4h5a.75.75 0 0 1 0 1.5h-5Z"
+                  clip-rule="evenodd"
+                />
+                <path
+                  fill-rule="evenodd"
+                  d="M6.194 12.753a.75.75 0 0 0 1.06.053L16.5 4.44v2.81a.75.75 0 0 0 1.5 0v-4.5a.75.75 0 0 0-.75-.75h-4.5a.75.75 0 0 0 0 1.5h2.553l-9.056 8.194a.75.75 0 0 0-.053 1.06Z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+            </a>
+          </nav>
+        </div>
+      </header>
+
+      <!-- Contenido principal -->
+      <main class="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-8 space-y-8">
+        <!-- Sección de Entrada Dual (Tabs + Paneles) -->
+        <section aria-label="Configuración de entrada" class="space-y-4">
+          <!-- Sistema de Pestañas (Tabs) -->
+          <div
+            role="tablist"
+            aria-label="Modo de generación de llave"
+            class="inline-flex flex-wrap sm:flex-nowrap items-center gap-2 p-1.5 bg-gray-800 border border-gray-700/80 rounded-xl"
+          >
+            <button
+              type="button"
+              id="tab-scanner"
+              role="tab"
+              aria-selected="true"
+              aria-controls="panel-scanner"
+              data-tab="scanner"
+              class="tab-btn px-4 py-2.5 text-sm font-semibold rounded-lg whitespace-nowrap shrink-0 transition-colors bg-cyan-500 text-gray-950 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+            >
+              Modo Escáner (Foto)
+            </button>
+            <button
+              type="button"
+              id="tab-manual"
+              role="tab"
+              aria-selected="false"
+              aria-controls="panel-manual"
+              data-tab="manual"
+              class="tab-btn px-4 py-2.5 text-sm font-semibold rounded-lg whitespace-nowrap shrink-0 transition-colors text-gray-300 hover:text-white hover:bg-gray-700/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+            >
+              Modo Manual (Código)
+            </button>
+          </div>
+
+          <!-- Contenedor 1: Modo Escáner (Foto) -->
+          <div
+            id="panel-scanner"
+            role="tabpanel"
+            aria-labelledby="tab-scanner"
+            class="bg-gray-800 border border-gray-700/80 rounded-xl p-6 space-y-6"
+          >
+            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div>
+                <h2 class="font-display text-lg font-semibold text-gray-100">
+                  Escáner óptico de llave
+                </h2>
+                <p class="text-sm text-gray-400">
+                  Carga una fotografía cenital de la llave sobre fondo claro contrastado para extraer su silueta 2D.
+                </p>
+              </div>
+
+              <!-- Indicador visual del estado del Motor OpenCV.js -->
+              <div
+                id="opencv-status"
+                aria-live="polite"
+                class="inline-flex items-center gap-2 text-xs font-mono text-amber-300 shrink-0 pt-1"
+              >
+                <svg
+                  id="opencv-spinner"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  class="w-4 h-4 animate-spin shrink-0"
+                  aria-hidden="true"
+                >
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
+                  <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v3a5 5 0 0 0-5 5H4Z"></path>
+                </svg>
+                <svg
+                  id="opencv-ready-icon"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  class="hidden w-4 h-4 shrink-0"
+                  aria-hidden="true"
+                >
+                  <path
+                    fill-rule="evenodd"
+                    d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z"
+                    clip-rule="evenodd"
+                  />
+                </svg>
+                <span id="opencv-status-text">Cargando motor OpenCV...</span>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+              <div class="flex flex-col gap-3">
+                <!-- Área de Drag & Drop + Input File clásico (deshabilitada hasta que cargue OpenCV) -->
+                <div
+                  id="drop-zone"
+                  tabindex="0"
+                  role="button"
+                  aria-disabled="true"
+                  aria-label="Área para arrastrar y soltar o seleccionar imagen de llave"
+                  class="flex-1 flex flex-col items-center justify-center text-center p-8 rounded-xl border-2 border-dashed border-gray-600 bg-gray-900/60 transition-colors opacity-50 pointer-events-none cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="currentColor"
+                    class="w-10 h-10 text-cyan-400 mb-3"
+                    aria-hidden="true"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"
+                    />
+                  </svg>
+                  <p class="text-sm font-medium text-gray-200">
+                    Arrastra y suelta la foto de tu llave aquí
+                  </p>
+                  <p class="text-xs text-gray-400 mt-1 mb-5">
+                    O utiliza el selector tradicional de archivos · JPG · PNG · WEBP
+                  </p>
+
+                  <label
+                    for="file-input"
+                    id="btn-file-select"
+                    class="inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-gray-950 transition-colors cursor-not-allowed whitespace-nowrap shrink-0 focus-within:ring-2 focus-within:ring-emerald-300"
+                  >
+                    Seleccionar imagen
+                    <input
+                      id="file-input"
+                      type="file"
+                      accept="image/*"
+                      disabled
+                      class="sr-only"
+                    />
+                  </label>
+
+                  <p
+                    id="scanner-error"
+                    role="alert"
+                    class="hidden mt-4 text-xs font-medium text-red-400"
+                  ></p>
+                </div>
+
+                <!-- Demo Profesional: Carga rápida de imagen de calibración -->
+                <div class="flex flex-wrap items-center justify-between gap-3 px-1">
+                  <span class="text-xs text-gray-500 font-mono">
+                    Prueba rápida de calibración óptica
+                  </span>
+                  <button
+                    type="button"
+                    id="btn-load-sample"
+                    disabled
+                    class="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium rounded-lg bg-gray-900/90 text-gray-300 border border-gray-700 hover:border-cyan-400/80 hover:text-cyan-300 hover:bg-gray-800 transition-all whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                      class="w-3.5 h-3.5 shrink-0 text-cyan-400"
+                      aria-hidden="true"
+                    >
+                      <path
+                        fill-rule="evenodd"
+                        d="M1 5.25A2.25 2.25 0 0 1 3.25 3h13.5A2.25 2.25 0 0 1 19 5.25v9.5A2.25 2.25 0 0 1 16.75 17H3.25A2.25 2.25 0 0 1 1 14.75v-9.5Zm1.5 5.81v3.69c0 .414.336.75.75.75h13.5a.75.75 0 0 0 .75-.75v-2.69l-2.22-2.219a.75.75 0 0 0-1.06 0l-1.91 1.909.47.47a.75.75 0 1 1-1.06 1.06L6.53 8.091a.75.75 0 0 0-1.06 0l-2.97 2.97ZM12 7a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"
+                        clip-rule="evenodd"
+                      />
+                    </svg>
+                    Cargar Imagen de Calibración
+                  </button>
+                </div>
+              </div>
+
+              <!-- Área de Previsualización + Canvas de procesamiento OpenCV -->
+              <div
+                id="preview-area"
+                class="flex flex-col justify-between rounded-xl border border-gray-700 bg-gray-900/70 p-4 min-h-[280px]"
+              >
+                <div class="flex items-center justify-between gap-4 pb-3 border-b border-gray-800">
+                  <span id="preview-title" class="text-xs font-medium text-gray-400">
+                    Previsualización de imagen
+                  </span>
+                  <div class="flex items-center gap-3">
+                    <button
+                      type="button"
+                      id="btn-toggle-original"
+                      class="hidden text-xs font-medium text-cyan-400 hover:text-cyan-300 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded px-1.5 py-0.5"
+                    >
+                      Ver original
+                    </button>
+                    <button
+                      type="button"
+                      id="btn-clear-image"
+                      class="hidden text-xs font-medium text-gray-300 hover:text-cyan-400 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded px-1.5 py-0.5"
+                    >
+                      Quitar imagen
+                    </button>
+                  </div>
+                </div>
+
+                <div class="flex-1 flex items-center justify-center py-4 overflow-hidden">
+                  <p id="preview-empty" class="text-sm text-gray-500 text-center px-4">
+                    Ninguna imagen cargada todavía.
+                  </p>
+                  <img
+                    id="img-preview"
+                    alt="Previsualización de la llave cargada"
+                    class="hidden max-h-60 w-auto max-w-full object-contain rounded-lg"
+                  />
+                  <!-- Canvas para renderizar el contorno poligonal detectado por OpenCV -->
+                  <canvas
+                    id="cvs-processing"
+                    class="hidden max-h-60 w-auto max-w-full object-contain rounded-lg"
+                  ></canvas>
+                </div>
+
+                <div class="space-y-3">
+                  <div
+                    id="preview-actions"
+                    class="hidden flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-gray-800"
+                  >
+                    <span id="vision-result-info" class="text-xs font-mono text-gray-400 tabular-nums">
+                      Lista para detección de contorno
+                    </span>
+                    <button
+                      type="button"
+                      id="btn-process-silhouette"
+                      class="px-4 py-2 text-sm font-semibold rounded-lg bg-cyan-500 hover:bg-cyan-400 text-gray-950 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+                    >
+                      Procesar Silueta
+                    </button>
+                  </div>
+
+                  <div
+                    id="preview-meta"
+                    class="hidden pt-2 border-t border-gray-800/80 flex items-center justify-between gap-4 text-xs font-mono text-gray-400 tabular-nums"
+                  >
+                    <span id="meta-filename" class="truncate"></span>
+                    <span id="meta-dimensions" class="shrink-0 text-cyan-400"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Calibración Milimétrica para Impresión 3D (Fase 7) -->
+            <div
+              id="calibration-panel"
+              class="rounded-xl border border-gray-700/80 bg-gray-900/60 p-4 space-y-4"
+            >
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 class="font-display text-sm font-semibold text-gray-100">
+                    Calibración de Escala (Impresión 3D)
+                  </h3>
+                  <p class="text-xs text-gray-400">
+                    Convierte los píxeles del contorno a milímetros reales (1 unidad 3D = 1 mm en el archivo STL).
+                  </p>
+                </div>
+                <span id="calibration-scale-info" class="text-xs font-mono text-cyan-400 tabular-nums">
+                  Relación 1:1 mm · pendiente de escaneo
+                </span>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="space-y-1.5">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <label
+                      for="input-real-width"
+                      class="block text-xs font-medium text-gray-300"
+                    >
+                      Ancho real de referencia (mm)
+                    </label>
+                    <div class="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        data-cal-preset="8.5"
+                        class="cal-preset-btn px-2 py-0.5 text-[11px] font-mono rounded bg-gray-800 border border-gray-700 text-gray-300 hover:border-cyan-400 hover:text-cyan-300 transition-colors"
+                      >
+                        8.5 mm (hoja)
+                      </button>
+                      <button
+                        type="button"
+                        data-cal-preset="55.0"
+                        class="cal-preset-btn px-2 py-0.5 text-[11px] font-mono rounded bg-gray-800 border border-gray-700 text-gray-300 hover:border-cyan-400 hover:text-cyan-300 transition-colors"
+                      >
+                        55 mm (llave)
+                      </button>
+                    </div>
+                  </div>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.5"
+                    max="150"
+                    id="input-real-width"
+                    value="8.5"
+                    class="w-full h-10 px-3 rounded-lg bg-gray-900 border border-gray-600 text-gray-100 font-mono text-sm tabular-nums focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/40 transition-colors"
+                  />
+                </div>
+
+                <div class="space-y-1.5">
+                  <label
+                    for="input-thickness"
+                    class="block text-xs font-medium text-gray-300"
+                  >
+                    Grosor de extrusión (Z-Depth en mm)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.4"
+                    max="20"
+                    id="input-thickness"
+                    value="2.2"
+                    class="w-full h-10 px-3 rounded-lg bg-gray-900 border border-gray-600 text-gray-100 font-mono text-sm tabular-nums focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/40 transition-colors"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Contenedor 2: Modo Manual (Código) -->
+          <div
+            id="panel-manual"
+            role="tabpanel"
+            aria-labelledby="tab-manual"
+            class="hidden bg-gray-800 border border-gray-700/80 rounded-xl p-6 space-y-6"
+          >
+            <div>
+              <h2 class="font-display text-lg font-semibold text-gray-100">
+                Generación paramétrica por especificación técnica
+              </h2>
+              <p class="text-sm text-gray-400">
+                Selecciona la llave estándar del fabricante e introduce la combinación de cortes (bitting code) para validar su viabilidad mecánica y extruir el modelo 3D.
+              </p>
+            </div>
+
+            <form id="manual-form" class="space-y-6" novalidate>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                <!-- Select de fabricante -->
+                <div class="space-y-2">
+                  <label
+                    for="select-manufacturer"
+                    class="block text-sm font-medium text-gray-200"
+                  >
+                    Fabricante / Perfil de llave
+                  </label>
+                  <select
+                    id="select-manufacturer"
+                    name="manufacturer"
+                    class="w-full h-11 px-3.5 rounded-lg bg-gray-900 border border-gray-600 text-gray-100 text-sm focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/40 transition-colors"
+                  >
+                    <option value="kw1">Kwikset KW1 (5 pines)</option>
+                    <option value="sc1">Schlage SC1 (5 pines)</option>
+                    <option value="sc4">Schlage SC4 (6 pines)</option>
+                    <option value="best_a2">Best SFIC — A2 System (7 pines)</option>
+                    <option value="master_m1">Master Lock M1 / 1K (4 pines)</option>
+                    <option value="yale_y1">Yale Y1 (5 pines)</option>
+                  </select>
+                  <p id="manufacturer-hint" class="text-xs text-gray-400 font-mono tabular-nums">
+                    5 pines · MACS 4 · rango 0–6 · paso 3.96 mm
+                  </p>
+                </div>
+
+                <!-- Input de código de cortes -->
+                <div class="space-y-2">
+                  <div class="flex items-center justify-between gap-2">
+                    <label
+                      for="input-bitting"
+                      class="block text-sm font-medium text-gray-200"
+                    >
+                      Código de cortes (Bitting code)
+                    </label>
+                    <button
+                      type="button"
+                      id="btn-load-example"
+                      class="text-xs font-mono text-cyan-400 hover:text-cyan-300 underline-offset-4 hover:underline transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded px-1"
+                    >
+                      Cargar ejemplo
+                    </button>
+                  </div>
+                  <input
+                    id="input-bitting"
+                    name="bitting"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    maxlength="5"
+                    placeholder="Ej: 25363"
+                    aria-describedby="bitting-feedback manual-macs-warning"
+                    aria-invalid="false"
+                    class="w-full h-11 px-3.5 rounded-lg bg-gray-900 border border-gray-600 text-gray-100 placeholder-gray-500 font-mono text-sm tracking-widest tabular-nums focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/40 transition-colors"
+                  />
+                  <div class="space-y-1">
+                    <p id="bitting-feedback" aria-live="polite" class="text-xs text-gray-400">
+                      Introduce 5 dígitos entre 0 y 6 (de punta a hombro).
+                    </p>
+                    <p
+                      id="manual-macs-warning"
+                      role="alert"
+                      aria-live="assertive"
+                      class="hidden text-xs font-mono font-semibold text-red-400"
+                    ></p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-gray-700/70">
+                <p id="manual-status" class="text-xs font-mono text-gray-400 tabular-nums"></p>
+                <div class="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    id="btn-generate-qr"
+                    disabled
+                    class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg bg-gray-900 border border-cyan-500/60 text-cyan-300 hover:bg-cyan-500/15 hover:border-cyan-400 transition-colors whitespace-nowrap shrink-0 disabled:bg-gray-700 disabled:border-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke-width="1.75"
+                      stroke="currentColor"
+                      class="w-4 h-4"
+                      aria-hidden="true"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 13.5 9.375v-4.5Z"
+                      />
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M6.75 6.75h.75v.75h-.75v-.75ZM6.75 16.5h.75v.75h-.75v-.75ZM16.5 6.75h.75v.75h-.75v-.75ZM13.5 13.5h.75v.75h-.75v-.75ZM13.5 19.5h.75v.75h-.75v-.75ZM19.5 13.5h.75v.75h-.75v-.75ZM19.5 19.5h.75v.75h-.75v-.75ZM16.5 16.5h.75v.75h-.75v-.75Z"
+                      />
+                    </svg>
+                    Generar QR
+                  </button>
+                  <button
+                    type="button"
+                    id="btn-export-audit-txt"
+                    disabled
+                    class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg bg-gray-900 border border-cyan-500/60 text-cyan-300 hover:bg-cyan-500/15 hover:border-cyan-400 transition-colors whitespace-nowrap shrink-0 disabled:bg-gray-700 disabled:border-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke-width="1.75"
+                      stroke="currentColor"
+                      class="w-4 h-4"
+                      aria-hidden="true"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"
+                      />
+                    </svg>
+                    Exportar Informe (.txt)
+                  </button>
+                  <button
+                    type="submit"
+                    id="btn-generate-profile"
+                    disabled
+                    class="px-5 py-2.5 text-sm font-semibold rounded-lg bg-cyan-500 hover:bg-cyan-400 text-gray-950 transition-colors whitespace-nowrap shrink-0 disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+                  >
+                    Generar Perfil
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            <!-- [INICIO FEEDBACK VISUAL MODO MANUAL - Canvas 2D] -->
+            <div class="pt-2">
+              <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-gray-400">
+                <span>Previsualización vectorial 2D de la llave (escala en mm)</span>
+                <div class="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    id="btn-toggle-ruler"
+                    aria-pressed="false"
+                    title="Superponer regla milimétrica y cotas de profundidad respecto al hombro"
+                    class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono rounded-md bg-gray-900 border border-gray-700 text-gray-300 hover:border-cyan-400 hover:text-cyan-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke-width="1.75"
+                      stroke="currentColor"
+                      class="w-3.5 h-3.5"
+                      aria-hidden="true"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M3.75 9h16.5m-16.5 6.75h16.5M6.75 9v2.25m3-2.25v1.5m3-1.5v2.25m3-2.25v1.5m3-1.5v2.25"
+                      />
+                    </svg>
+                    <span id="ruler-toggle-label">Regla mm: OFF</span>
+                  </button>
+                  <span id="manual-profile-metrics" class="font-mono text-cyan-400 tabular-nums"></span>
+                </div>
+              </div>
+              <canvas
+                id="cvs-manual-preview"
+                class="w-full h-56 bg-gray-900 border border-gray-700 mt-3 rounded-lg block"
+              ></canvas>
+            </div>
+            <!-- [FIN FEEDBACK VISUAL MODO MANUAL - Canvas 2D] -->
+
+            <!-- Panel de Transferencia por Código QR -->
+            <div
+              id="manual-qr-panel"
+              class="hidden bg-gray-900/90 border border-gray-700 rounded-xl p-4 sm:p-5"
+            >
+              <div class="flex flex-col sm:flex-row items-start gap-5">
+                <div class="shrink-0 bg-white p-2.5 rounded-lg border border-gray-700 shadow-sm">
+                  <canvas
+                    id="qr-canvas"
+                    width="180"
+                    height="180"
+                    class="block w-[160px] h-[160px] sm:w-[180px] sm:h-[180px]"
+                  ></canvas>
+                </div>
+                <div class="flex-1 min-w-0 w-full space-y-3">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 class="text-sm font-semibold text-gray-100">
+                        Código QR de Especificaciones y Bitting
+                      </h3>
+                      <p id="qr-summary-label" class="text-xs font-mono text-cyan-400 mt-0.5"></p>
+                    </div>
+                    <button
+                      type="button"
+                      id="btn-close-qr"
+                      class="text-xs font-mono text-gray-400 hover:text-gray-200 px-2 py-1 rounded border border-gray-700 hover:border-gray-500 transition-colors"
+                    >
+                      Ocultar
+                    </button>
+                  </div>
+                  <pre
+                    id="qr-payload-preview"
+                    class="bg-gray-950/90 border border-gray-800 rounded-lg p-3 text-[11px] font-mono text-gray-300 overflow-x-auto max-h-32 leading-relaxed"
+                  ></pre>
+                  <div class="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      id="btn-download-qr"
+                      class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-500 text-gray-950 hover:bg-emerald-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+                    >
+                      Descargar QR (.png)
+                    </button>
+                    <button
+                      type="button"
+                      id="btn-copy-qr-payload"
+                      class="px-3.5 py-1.5 text-xs font-mono rounded-lg bg-gray-800 border border-gray-600 text-gray-200 hover:border-cyan-400 hover:text-cyan-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+                    >
+                      Copiar JSON
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Contenedor de Salida 3D (Común para ambos modos) -->
+        <section aria-label="Salida de modelo 3D" class="bg-gray-800 border border-gray-700/80 rounded-xl p-6 space-y-5">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 class="font-display text-lg font-semibold text-gray-100">
+              Visor 3D Paramétrico
+            </h2>
+            <div class="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                id="btn-reset-camera"
+                disabled
+                title="Restablecer encuadre de cámara 3D"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded-lg bg-gray-900 border border-gray-700 text-gray-300 hover:border-cyan-400 hover:text-cyan-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.75"
+                  stroke="currentColor"
+                  class="w-3.5 h-3.5"
+                  aria-hidden="true"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"
+                  />
+                </svg>
+                <span>Centrar Vista</span>
+              </button>
+              <button
+                type="button"
+                id="btn-showcase-rotate"
+                aria-pressed="false"
+                title="Activar o desactivar rotación lenta automática sobre el eje Z"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded-lg bg-gray-900 border border-gray-700 text-gray-300 hover:border-cyan-400 hover:text-cyan-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.75"
+                  stroke="currentColor"
+                  class="w-3.5 h-3.5"
+                  aria-hidden="true"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
+                  />
+                </svg>
+                <span id="showcase-rotate-label">Exhibición Z: OFF</span>
+              </button>
+              <span id="viewer-mode-label" class="text-xs font-mono text-cyan-400">
+                Origen activo: Modo Escáner (Foto)
+              </span>
+            </div>
+          </div>
+
+          <div
+            id="viewer-3d"
+            class="viewer-grid relative w-full h-[400px] rounded-xl border border-gray-700 overflow-hidden select-none"
+          >
+            <!-- Overlay inicial antes de la primera extrusión 3D -->
+            <div
+              id="viewer-placeholder"
+              class="absolute inset-0 z-10 pointer-events-none flex flex-col items-center justify-center p-6 text-center"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="1.5"
+                stroke="currentColor"
+                class="w-10 h-10 text-gray-500 mb-3"
+                aria-hidden="true"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"
+                />
+              </svg>
+              <p class="text-base font-medium text-gray-300">
+                El modelo 3D se renderizará aquí
+              </p>
+              <p id="viewer-substatus" class="text-xs font-mono text-gray-500 mt-2 max-w-md">
+                Esperando entrada de imagen o parámetros de corte.
+              </p>
+            </div>
+
+            <!-- Barra sutil de estado/interacción una vez renderizada la malla 3D -->
+            <div
+              id="viewer-hud"
+              class="hidden absolute bottom-3 left-3 right-3 z-10 pointer-events-none flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-gray-300"
+            >
+              <span id="viewer-mesh-stats" class="bg-gray-900/85 border border-gray-700/80 px-2.5 py-1 rounded-md tabular-nums"></span>
+              <span class="bg-gray-900/85 border border-gray-700/80 px-2.5 py-1 rounded-md text-gray-400">
+                Arrastra para rotar · Rueda para zoom · Clic derecho para mover
+              </span>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-end justify-between gap-4 pt-1 border-t border-gray-700/70">
+            <div class="flex flex-wrap items-center gap-4">
+              <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+                <label
+                  for="select-print-material"
+                  class="text-xs font-mono font-medium text-gray-300 whitespace-nowrap"
+                >
+                  Material de Impresión
+                </label>
+                <select
+                  id="select-print-material"
+                  class="bg-gray-900 border border-gray-700 text-gray-200 text-xs sm:text-sm font-mono rounded-lg px-3 py-2 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-colors"
+                >
+                  <option value="steel" selected>Acero Inoxidable (metalness 0.90)</option>
+                  <option value="brass">Latón Clásico (metalness 0.92)</option>
+                  <option value="aluminum">Aluminio Anodizado (metalness 0.82)</option>
+                  <option value="copper">Bronce / Cobre (metalness 0.90)</option>
+                  <option value="pla_matte">PLA / Resina Prototipo (metalness 0.08)</option>
+                </select>
+              </div>
+              <div class="flex items-center gap-2">
+                <label
+                  for="input-thickness-viewer"
+                  class="text-xs font-mono font-medium text-gray-300 whitespace-nowrap"
+                >
+                  Grosor Z (mm)
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.4"
+                  max="20"
+                  id="input-thickness-viewer"
+                  value="2.2"
+                  class="w-20 h-9 px-2.5 rounded-lg bg-gray-900 border border-gray-700 text-gray-100 font-mono text-xs sm:text-sm tabular-nums focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400 transition-colors"
+                />
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                id="btn-capture-screenshot"
+                disabled
+                class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg bg-gray-900 border border-cyan-500/60 text-cyan-300 hover:bg-cyan-500/15 hover:border-cyan-400 transition-colors whitespace-nowrap shrink-0 disabled:bg-gray-700 disabled:border-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.75"
+                  stroke="currentColor"
+                  class="w-4 h-4"
+                  aria-hidden="true"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z"
+                  />
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z"
+                  />
+                </svg>
+                Captura de Pantalla
+              </button>
+              <button
+                type="button"
+                id="btn-download-stl"
+                disabled
+                class="px-5 py-2.5 text-sm font-semibold rounded-lg bg-emerald-500 text-gray-950 hover:bg-emerald-400 transition-colors whitespace-nowrap shrink-0 disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+              >
+                Descargar STL
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- Footer -->
+      <footer class="border-t border-gray-800 bg-gray-900">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-4 text-xs text-gray-500">
+          <span>KeyForge Web · Cerrajería técnica y auditoría física · 100% en cliente</span>
+          <a
+            href="https://www.unfantasmaenelsistema.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-gray-400 hover:text-cyan-400 transition-colors"
+          >
+            Un Fantasma en el Sistema
+          </a>
+        </div>
+      </footer>
+    </div>
+
+    <!-- Vanilla JavaScript incrustado (Fases 1, 2 y 3) -->
+    <script>
+      (function () {
+        'use strict';
+
+        // --- 1. Sistema de Pestañas (Tabs) ---
+        const tabButtons = document.querySelectorAll('.tab-btn');
+        const panelScanner = document.getElementById('panel-scanner');
+        const panelManual = document.getElementById('panel-manual');
+        const viewerModeLabel = document.getElementById('viewer-mode-label');
+
+        const activeTabClasses = ['bg-cyan-500', 'text-gray-950', 'shadow-sm'];
+        const inactiveTabClasses = ['text-gray-300', 'hover:text-white', 'hover:bg-gray-700/60'];
+
+        let lastManualProfile = null;
+
+        function switchTab(targetTab) {
+          const isScanner = targetTab === 'scanner';
+
+          panelScanner.classList.toggle('hidden', !isScanner);
+          panelManual.classList.toggle('hidden', isScanner);
+
+          tabButtons.forEach((btn) => {
+            const selected = btn.dataset.tab === targetTab;
+            btn.setAttribute('aria-selected', String(selected));
+            if (selected) {
+              btn.classList.remove(...inactiveTabClasses);
+              btn.classList.add(...activeTabClasses);
+            } else {
+              btn.classList.remove(...activeTabClasses);
+              btn.classList.add(...inactiveTabClasses);
+            }
+          });
+
+          viewerModeLabel.textContent = isScanner
+            ? 'Origen activo: Modo Escáner (Foto)'
+            : 'Origen activo: Modo Manual (Código)';
+
+          if (!isScanner) {
+            requestAnimationFrame(() => {
+              drawProfileOnCanvas('cvs-manual-preview', lastManualProfile || []);
+            });
+          }
+        }
+
+        tabButtons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            switchTab(btn.dataset.tab);
+          });
+        });
+
+        // --- 2. Contenedor Modo Escáner (Carga, Previsualización y Visión OpenCV.js) ---
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const btnFileSelect = document.getElementById('btn-file-select');
+        const btnLoadSample = document.getElementById('btn-load-sample');
+        const imgPreview = document.getElementById('img-preview');
+        const cvsProcessing = document.getElementById('cvs-processing');
+        const previewEmpty = document.getElementById('preview-empty');
+        const previewMeta = document.getElementById('preview-meta');
+        const previewActions = document.getElementById('preview-actions');
+        const previewTitle = document.getElementById('preview-title');
+        const metaFilename = document.getElementById('meta-filename');
+        const metaDimensions = document.getElementById('meta-dimensions');
+        const btnClearImage = document.getElementById('btn-clear-image');
+        const btnToggleOriginal = document.getElementById('btn-toggle-original');
+        const btnProcessSilhouette = document.getElementById('btn-process-silhouette');
+        const visionResultInfo = document.getElementById('vision-result-info');
+        const scannerError = document.getElementById('scanner-error');
+        const viewerSubstatus = document.getElementById('viewer-substatus');
+        const inputRealWidth = document.getElementById('input-real-width');
+        const inputThickness = document.getElementById('input-thickness');
+        const calibrationScaleInfo = document.getElementById('calibration-scale-info');
+
+        const opencvStatus = document.getElementById('opencv-status');
+        const opencvStatusText = document.getElementById('opencv-status-text');
+        const opencvSpinner = document.getElementById('opencv-spinner');
+        const opencvReadyIcon = document.getElementById('opencv-ready-icon');
+
+        let currentObjectUrl = null;
+        let isOpenCvReady = false;
+        let hasProcessedResult = false;
+        let showingProcessedCanvas = false;
+        let lastRawPixelProfile = null;
+        let lastProfileSource = null;
+
+        function getCalibratedRealWidthMm() {
+          const parsed = inputRealWidth ? parseFloat(inputRealWidth.value) : 8.5;
+          return Number.isFinite(parsed) && parsed > 0 ? parsed : 8.5;
+        }
+
+        function scalePixelProfileToMillimeters(pixelPoints) {
+          let minX = Infinity;
+          let maxX = -Infinity;
+          let minY = Infinity;
+          let maxY = -Infinity;
+          for (const pt of pixelPoints) {
+            if (pt.x < minX) minX = pt.x;
+            if (pt.x > maxX) maxX = pt.x;
+            if (pt.y < minY) minY = pt.y;
+            if (pt.y > maxY) maxY = pt.y;
+          }
+
+          const pixelWidth = Math.max(1e-6, maxX - minX);
+          const realWidthMm = getCalibratedRealWidthMm();
+          const scaleFactor = realWidthMm / pixelWidth;
+
+          // Invertir eje Y de imagen (arriba->abajo) al sistema cartesiano 3D (abajo->arriba)
+          const mapPoint = (pt) => ({
+            x: Math.round((pt.x - minX) * scaleFactor * 10000) / 10000,
+            y: Math.round((maxY - pt.y) * scaleFactor * 10000) / 10000,
+          });
+
+          const scaledPoints = pixelPoints.map(mapPoint);
+          if (Array.isArray(pixelPoints.holes) && pixelPoints.holes.length > 0) {
+            scaledPoints.holes = pixelPoints.holes.map((holePts) => holePts.map(mapPoint));
+          }
+
+          return { scaledPoints, pixelWidth, realWidthMm, scaleFactor };
+        }
+
+        /* === INICIO LÓGICA DE OPENCV.JS (Estado de carga y pipeline de visión) === */
+        function setOpenCvReadyState() {
+          if (isOpenCvReady) return;
+          isOpenCvReady = true;
+
+          opencvSpinner.classList.add('hidden');
+          opencvReadyIcon.classList.remove('hidden');
+          opencvStatus.classList.remove('text-amber-300', 'text-red-400');
+          opencvStatus.classList.add('text-emerald-400');
+          opencvStatusText.textContent = 'Motor de Visión Listo';
+
+          fileInput.disabled = false;
+          btnLoadSample.disabled = false;
+          dropZone.setAttribute('aria-disabled', 'false');
+          dropZone.classList.remove('opacity-50', 'pointer-events-none', 'cursor-not-allowed');
+          dropZone.classList.add('hover:border-cyan-400/80', 'hover:bg-gray-900', 'cursor-pointer');
+          btnFileSelect.classList.remove('cursor-not-allowed');
+          btnFileSelect.classList.add('cursor-pointer');
+        }
+
+        function setOpenCvErrorState() {
+          opencvSpinner.classList.add('hidden');
+          opencvStatus.classList.remove('text-amber-300', 'text-emerald-400');
+          opencvStatus.classList.add('text-red-400');
+          opencvStatusText.textContent = 'Error al cargar OpenCV.js';
+          showScannerError('No se pudo cargar OpenCV.js desde el CDN. Verifica tu conexión.');
+        }
+
+        window.__notifyOpenCvReady = setOpenCvReadyState;
+        window.__notifyOpenCvError = setOpenCvErrorState;
+
+        if (typeof window.cv !== 'undefined' && typeof window.cv.Mat === 'function') {
+          setOpenCvReadyState();
+        }
+
+        function processKeySilhouette() {
+          if (!isOpenCvReady) {
+            showScannerError('El motor OpenCV aún se está inicializando.');
+            return;
+          }
+          if (!imgPreview.src || !imgPreview.complete || imgPreview.naturalWidth === 0) {
+            showScannerError('Carga primero una imagen válida antes de procesar.');
+            return;
+          }
+
+          clearScannerError();
+
+          const wasImgHidden = imgPreview.classList.contains('hidden');
+          if (wasImgHidden) {
+            imgPreview.classList.remove('hidden');
+          }
+
+          let src = null;
+          let gray = null;
+          let blurred = null;
+          let binary = null;
+          let morph = null;
+          let kernel = null;
+          let contours = null;
+          let hierarchy = null;
+          let largestContour = null;
+          let approxPoly = null;
+          let approxVector = null;
+          let dst = null;
+
+          try {
+            src = cv.imread(imgPreview);
+
+            gray = new cv.Mat();
+            cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+
+            blurred = new cv.Mat();
+            cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+
+            binary = new cv.Mat();
+            cv.threshold(blurred, binary, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+
+            morph = new cv.Mat();
+            kernel = cv.Mat.ones(3, 3, cv.CV_8U);
+            cv.morphologyEx(binary, morph, cv.MORPH_CLOSE, kernel);
+
+            contours = new cv.MatVector();
+            hierarchy = new cv.Mat();
+            cv.findContours(morph, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
+
+            if (contours.size() === 0) {
+              showScannerError('No se detectó ningún contorno. Usa una foto con mayor contraste sobre fondo claro.');
+              if (wasImgHidden) imgPreview.classList.add('hidden');
+              return;
+            }
+
+            let maxArea = -1;
+            let maxContourIdx = -1;
+            for (let i = 0; i < contours.size(); i++) {
+              const parentIdx = hierarchy.intPtr(0, i)[3];
+              if (parentIdx !== -1) continue;
+              const cnt = contours.get(i);
+              const area = cv.contourArea(cnt, false);
+              if (area > maxArea) {
+                maxArea = area;
+                maxContourIdx = i;
+              }
+              cnt.delete();
+            }
+
+            if (maxContourIdx === -1 || maxArea <= 50) {
+              showScannerError('El contorno detectado es demasiado pequeño para representar una llave.');
+              if (wasImgHidden) imgPreview.classList.add('hidden');
+              return;
+            }
+
+            largestContour = contours.get(maxContourIdx);
+
+            approxPoly = new cv.Mat();
+            const perimeter = cv.arcLength(largestContour, true);
+            const epsilon = 0.002 * perimeter;
+            cv.approxPolyDP(largestContour, approxPoly, epsilon, true);
+
+            const extractedPoints = [];
+            const data = approxPoly.data32S;
+            for (let i = 0; i < data.length; i += 2) {
+              extractedPoints.push({ x: data[i], y: data[i + 1] });
+            }
+
+            // Extraer agujeros interiores (como el orificio del llavero) hijos del contorno principal
+            const detectedHoles = [];
+            const holeDrawVector = new cv.MatVector();
+            for (let i = 0; i < contours.size(); i++) {
+              const parentIdx = hierarchy.intPtr(0, i)[3];
+              if (parentIdx !== maxContourIdx) continue;
+              const holeCnt = contours.get(i);
+              const holeArea = cv.contourArea(holeCnt, false);
+              if (holeArea >= maxArea * 0.005 && holeArea <= maxArea * 0.35) {
+                const approxHole = new cv.Mat();
+                const holePerim = cv.arcLength(holeCnt, true);
+                cv.approxPolyDP(holeCnt, approxHole, 0.005 * holePerim, true);
+                const hData = approxHole.data32S;
+                if (hData.length >= 6) {
+                  const holePts = [];
+                  for (let j = 0; j < hData.length; j += 2) {
+                    holePts.push({ x: hData[j], y: hData[j + 1] });
+                  }
+                  detectedHoles.push(holePts);
+                  holeDrawVector.push_back(approxHole);
+                }
+                approxHole.delete();
+              }
+              holeCnt.delete();
+            }
+            if (detectedHoles.length > 0) {
+              extractedPoints.holes = detectedHoles;
+            }
+
+            lastRawPixelProfile = extractedPoints;
+            window.extractedProfile2D = extractedPoints;
+
+            // Conversión Píxel -> Milímetro (Fase 7)
+            const { scaledPoints, pixelWidth, realWidthMm, scaleFactor } =
+              scalePixelProfileToMillimeters(window.extractedProfile2D);
+            window.extractedProfile2D = scaledPoints;
+            lastProfileSource = 'scanner';
+            window.__activeKeyFilenameBase = 'escaner';
+
+            dst = src.clone();
+            approxVector = new cv.MatVector();
+            approxVector.push_back(approxPoly);
+
+            const neonGreen = new cv.Scalar(16, 255, 136, 255);
+            const cyanHole = new cv.Scalar(34, 211, 238, 255);
+            const lineThickness = Math.max(2, Math.round(Math.min(src.cols, src.rows) * 0.006));
+            cv.drawContours(dst, approxVector, 0, neonGreen, lineThickness, cv.LINE_AA);
+            for (let h = 0; h < holeDrawVector.size(); h++) {
+              cv.drawContours(dst, holeDrawVector, h, cyanHole, lineThickness, cv.LINE_AA);
+            }
+            holeDrawVector.delete();
+
+            cv.imshow('cvs-processing', dst);
+
+            hasProcessedResult = true;
+            showingProcessedCanvas = true;
+            imgPreview.classList.add('hidden');
+            cvsProcessing.classList.remove('hidden');
+            btnToggleOriginal.classList.remove('hidden');
+            btnToggleOriginal.textContent = 'Ver original';
+            previewTitle.textContent = 'Silueta poligonal detectada (OpenCV)';
+
+            if (calibrationScaleInfo) {
+              calibrationScaleInfo.textContent =
+                `Escala: ${scaleFactor.toFixed(4)} mm/px (${Math.round(pixelWidth)} px → ${realWidthMm.toFixed(1)} mm)`;
+            }
+
+            visionResultInfo.textContent =
+              `Silueta calibrada: ${scaledPoints.length} vértices · ancho ${realWidthMm.toFixed(1)} mm`;
+            visionResultInfo.classList.remove('text-gray-400');
+            visionResultInfo.classList.add('text-emerald-400');
+            viewerSubstatus.textContent =
+              `Perfil 2D calibrado a ${realWidthMm.toFixed(1)} mm reales (${scaledPoints.length} vértices).`;
+
+            // Integración Fase 4 + 7: extruir automáticamente el perfil en milímetros reales
+            if (typeof window.generate3DModel === 'function') {
+              window.generate3DModel(window.extractedProfile2D);
+            }
+          } catch (err) {
+            console.error('Error en el procesamiento OpenCV:', err);
+            showScannerError('Ocurrió un error al procesar la silueta con OpenCV.');
+            if (wasImgHidden) imgPreview.classList.add('hidden');
+          } finally {
+            if (src) src.delete();
+            if (gray) gray.delete();
+            if (blurred) blurred.delete();
+            if (binary) binary.delete();
+            if (morph) morph.delete();
+            if (kernel) kernel.delete();
+            if (contours) contours.delete();
+            if (hierarchy) hierarchy.delete();
+            if (largestContour) largestContour.delete();
+            if (approxPoly) approxPoly.delete();
+            if (approxVector) approxVector.delete();
+            if (dst) dst.delete();
+          }
+        }
+        /* === FIN LÓGICA DE OPENCV.JS === */
+
+        function showScannerError(message) {
+          scannerError.textContent = message;
+          scannerError.classList.remove('hidden');
+        }
+
+        function clearScannerError() {
+          scannerError.textContent = '';
+          scannerError.classList.add('hidden');
+        }
+
+        function resetImagePreview() {
+          if (currentObjectUrl) {
+            URL.revokeObjectURL(currentObjectUrl);
+            currentObjectUrl = null;
+          }
+          window.extractedProfile2D = [];
+          lastRawPixelProfile = null;
+          lastProfileSource = null;
+          hasProcessedResult = false;
+          showingProcessedCanvas = false;
+
+          imgPreview.onload = null;
+          imgPreview.onerror = null;
+          imgPreview.removeAttribute('src');
+          imgPreview.removeAttribute('crossOrigin');
+          imgPreview.classList.add('hidden');
+          cvsProcessing.classList.add('hidden');
+          previewEmpty.classList.remove('hidden');
+          previewMeta.classList.add('hidden');
+          previewActions.classList.add('hidden');
+          btnClearImage.classList.add('hidden');
+          btnToggleOriginal.classList.add('hidden');
+          previewTitle.textContent = 'Previsualización de imagen';
+          visionResultInfo.textContent = 'Lista para detección de contorno';
+          visionResultInfo.classList.remove('text-emerald-400');
+          visionResultInfo.classList.add('text-gray-400');
+          if (calibrationScaleInfo) {
+            calibrationScaleInfo.textContent = 'Relación 1:1 mm · pendiente de escaneo';
+          }
+          fileInput.value = '';
+          clearScannerError();
+          viewerSubstatus.textContent = 'Esperando entrada de imagen o parámetros de corte.';
+        }
+
+        function handleImageFile(file) {
+          if (!isOpenCvReady) return;
+
+          clearScannerError();
+
+          if (!file) return;
+
+          if (!file.type || !file.type.startsWith('image/')) {
+            showScannerError('El archivo seleccionado no es una imagen válida (usa JPG, PNG o WEBP).');
+            return;
+          }
+
+          if (currentObjectUrl) {
+            URL.revokeObjectURL(currentObjectUrl);
+          }
+
+          window.extractedProfile2D = [];
+          lastRawPixelProfile = null;
+          lastProfileSource = null;
+          hasProcessedResult = false;
+          showingProcessedCanvas = false;
+          cvsProcessing.classList.add('hidden');
+          btnToggleOriginal.classList.add('hidden');
+          previewTitle.textContent = 'Previsualización de imagen';
+          visionResultInfo.textContent = 'Lista para detección de contorno';
+          visionResultInfo.classList.remove('text-emerald-400');
+          visionResultInfo.classList.add('text-gray-400');
+          if (calibrationScaleInfo) {
+            calibrationScaleInfo.textContent = 'Relación 1:1 mm · pendiente de escaneo';
+          }
+
+          currentObjectUrl = URL.createObjectURL(file);
+          imgPreview.removeAttribute('crossOrigin');
+          imgPreview.onerror = null;
+          imgPreview.onload = () => {
+            metaDimensions.textContent = `${imgPreview.naturalWidth} × ${imgPreview.naturalHeight} px`;
+          };
+          imgPreview.src = currentObjectUrl;
+          imgPreview.classList.remove('hidden');
+          previewEmpty.classList.add('hidden');
+          previewMeta.classList.remove('hidden');
+          previewActions.classList.remove('hidden');
+          btnClearImage.classList.remove('hidden');
+          metaFilename.textContent = file.name;
+          viewerSubstatus.textContent = `Imagen cargada: "${file.name}". Pulsa "Procesar Silueta" para generar el 3D.`;
+        }
+
+        function loadSampleImage() {
+          if (!isOpenCvReady) return;
+
+          clearScannerError();
+
+          if (currentObjectUrl) {
+            URL.revokeObjectURL(currentObjectUrl);
+            currentObjectUrl = null;
+          }
+
+          window.extractedProfile2D = [];
+          lastRawPixelProfile = null;
+          lastProfileSource = null;
+          hasProcessedResult = false;
+          showingProcessedCanvas = false;
+          cvsProcessing.classList.add('hidden');
+          btnToggleOriginal.classList.add('hidden');
+          previewTitle.textContent = 'Previsualización de imagen';
+          visionResultInfo.textContent = 'Cargando imagen de calibración...';
+          visionResultInfo.classList.remove('text-emerald-400');
+          visionResultInfo.classList.add('text-gray-400');
+          if (calibrationScaleInfo) {
+            calibrationScaleInfo.textContent = 'Relación 1:1 mm · calibrando...';
+          }
+          fileInput.value = '';
+
+          imgPreview.onload = null;
+          imgPreview.onerror = null;
+          imgPreview.crossOrigin = 'Anonymous';
+
+          if (inputRealWidth) {
+            inputRealWidth.value = '55.0';
+          }
+
+          imgPreview.onload = () => {
+            imgPreview.onload = null;
+            imgPreview.onerror = null;
+            metaDimensions.textContent = `${imgPreview.naturalWidth} × ${imgPreview.naturalHeight} px`;
+            metaFilename.textContent = 'sample.png';
+            imgPreview.classList.remove('hidden');
+            previewEmpty.classList.add('hidden');
+            previewMeta.classList.remove('hidden');
+            previewActions.classList.remove('hidden');
+            btnClearImage.classList.remove('hidden');
+            viewerSubstatus.textContent = 'Imagen de ejemplo cargada: "sample.png". Procesando silueta...';
+
+            requestAnimationFrame(() => {
+              btnProcessSilhouette.click();
+            });
+          };
+
+          imgPreview.onerror = () => {
+            imgPreview.onload = null;
+            imgPreview.onerror = null;
+            resetImagePreview();
+            showScannerError(
+              'No se ha encontrado la imagen de ejemplo. Asegúrate de que sample.png esté en la raíz del proyecto.'
+            );
+          };
+
+          imgPreview.src = './sample.png';
+        }
+
+        btnLoadSample.addEventListener('click', (event) => {
+          event.stopPropagation();
+          loadSampleImage();
+        });
+
+        fileInput.addEventListener('change', (event) => {
+          const file = event.target.files && event.target.files[0];
+          handleImageFile(file);
+        });
+
+        dropZone.addEventListener('click', (event) => {
+          if (!isOpenCvReady) return;
+          if (
+            event.target.closest('label[for="file-input"]') ||
+            event.target.closest('#btn-load-sample') ||
+            event.target === fileInput
+          ) {
+            return;
+          }
+          fileInput.click();
+        });
+
+        dropZone.addEventListener('keydown', (event) => {
+          if (!isOpenCvReady) return;
+          if (event.target !== dropZone) return;
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            fileInput.click();
+          }
+        });
+
+        ['dragenter', 'dragover'].forEach((eventName) => {
+          dropZone.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!isOpenCvReady) return;
+            dropZone.classList.add('border-cyan-400', 'bg-gray-800/80');
+          });
+        });
+
+        ['dragleave', 'drop'].forEach((eventName) => {
+          dropZone.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            dropZone.classList.remove('border-cyan-400', 'bg-gray-800/80');
+          });
+        });
+
+        dropZone.addEventListener('drop', (event) => {
+          if (!isOpenCvReady) return;
+          const files = event.dataTransfer && event.dataTransfer.files;
+          if (files && files.length > 0) {
+            handleImageFile(files[0]);
+          }
+        });
+
+        btnClearImage.addEventListener('click', resetImagePreview);
+        btnProcessSilhouette.addEventListener('click', processKeySilhouette);
+
+        function recalibrateActiveScannerModel() {
+          if (!lastRawPixelProfile || lastRawPixelProfile.length < 3) return;
+          if (lastProfileSource !== 'scanner') return;
+
+          const { scaledPoints, pixelWidth, realWidthMm, scaleFactor } =
+            scalePixelProfileToMillimeters(lastRawPixelProfile);
+          window.extractedProfile2D = scaledPoints;
+
+          if (calibrationScaleInfo) {
+            calibrationScaleInfo.textContent =
+              `Escala: ${scaleFactor.toFixed(4)} mm/px (${Math.round(pixelWidth)} px → ${realWidthMm.toFixed(1)} mm)`;
+          }
+          visionResultInfo.textContent =
+            `Silueta calibrada: ${scaledPoints.length} vértices · ancho ${realWidthMm.toFixed(1)} mm`;
+          viewerSubstatus.textContent =
+            `Perfil 2D recalibrado a ${realWidthMm.toFixed(1)} mm reales (${scaledPoints.length} vértices).`;
+
+          if (typeof window.generate3DModel === 'function') {
+            window.generate3DModel(window.extractedProfile2D);
+          }
+        }
+
+        if (inputRealWidth) {
+          inputRealWidth.addEventListener('input', recalibrateActiveScannerModel);
+          inputRealWidth.addEventListener('change', recalibrateActiveScannerModel);
+        }
+
+        document.querySelectorAll('.cal-preset-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            if (!inputRealWidth) return;
+            inputRealWidth.value = btn.dataset.calPreset || '8.5';
+            recalibrateActiveScannerModel();
+          });
+        });
+
+        const inputThicknessViewer = document.getElementById('input-thickness-viewer');
+
+        function syncThicknessInputs(sourceEl, targetEl) {
+          if (sourceEl && targetEl && targetEl.value !== sourceEl.value) {
+            targetEl.value = sourceEl.value;
+          }
+          if (
+            Array.isArray(window.extractedProfile2D) &&
+            window.extractedProfile2D.length >= 3 &&
+            typeof window.generate3DModel === 'function' &&
+            currentMesh
+          ) {
+            window.generate3DModel(window.extractedProfile2D);
+          }
+        }
+
+        if (inputThickness) {
+          const onScannerThicknessChange = () => syncThicknessInputs(inputThickness, inputThicknessViewer);
+          inputThickness.addEventListener('input', onScannerThicknessChange);
+          inputThickness.addEventListener('change', onScannerThicknessChange);
+        }
+
+        if (inputThicknessViewer) {
+          const onViewerThicknessChange = () => syncThicknessInputs(inputThicknessViewer, inputThickness);
+          inputThicknessViewer.addEventListener('input', onViewerThicknessChange);
+          inputThicknessViewer.addEventListener('change', onViewerThicknessChange);
+        }
+
+        btnToggleOriginal.addEventListener('click', () => {
+          if (!hasProcessedResult) return;
+          showingProcessedCanvas = !showingProcessedCanvas;
+          if (showingProcessedCanvas) {
+            imgPreview.classList.add('hidden');
+            cvsProcessing.classList.remove('hidden');
+            btnToggleOriginal.textContent = 'Ver original';
+            previewTitle.textContent = 'Silueta poligonal detectada (OpenCV)';
+          } else {
+            cvsProcessing.classList.add('hidden');
+            imgPreview.classList.remove('hidden');
+            btnToggleOriginal.textContent = 'Ver silueta';
+            previewTitle.textContent = 'Previsualización de imagen';
+          }
+        });
+
+        // --- 3. Contenedor Modo Manual (Base de Datos KEY_SPECS y Motor Paramétrico) ---
+
+        /* === INICIO DICCIONARIO DE DATOS Y MOTOR PARAMÉTRICO (FASE 6) === */
+        const KEY_SPECS = {
+          kw1: {
+            label: 'Kwikset (KW1)',
+            pins: 5,
+            macs: 4,
+            tipToFirstPin: 6.27, // mm
+            pinSpacing: 3.96,    // mm
+            rootDepth: 8.35,     // mm (corte 0)
+            depthIncrement: 0.58,// mm por corte
+            cutAngle: 90,        // grados
+            minCut: 0,
+            maxCut: 6,
+            flatWidth: 1.1,      // mm ancho plano en el valle de cada corte
+            tipChamfer: 1.35,    // mm bisel de punta
+            shoulderMargin: 5.5, // mm margen tras el último pin hasta el hombro
+            exampleCode: '25363',
+          },
+          sc1: {
+            label: 'Schlage (SC1)',
+            pins: 5,
+            macs: 7,
+            tipToFirstPin: 5.87, // mm
+            pinSpacing: 3.96,    // mm
+            rootDepth: 8.51,     // mm (corte 0)
+            depthIncrement: 0.38,// mm por corte
+            cutAngle: 90,        // grados
+            minCut: 0,
+            maxCut: 9,
+            flatWidth: 0.95,     // mm ancho plano en el valle de cada corte
+            tipChamfer: 1.35,    // mm bisel de punta
+            shoulderMargin: 5.5, // mm margen tras el último pin hasta el hombro
+            exampleCode: '47295',
+          },
+          sc4: {
+            label: 'Schlage (SC4)',
+            pins: 6,
+            macs: 7,
+            tipToFirstPin: 5.87, // mm (idéntico paso a SC1, hoja extendida a 6 pines)
+            pinSpacing: 3.96,    // mm
+            rootDepth: 8.51,     // mm (corte 0)
+            depthIncrement: 0.38,// mm por corte
+            cutAngle: 90,        // grados
+            minCut: 0,
+            maxCut: 9,
+            flatWidth: 0.95,
+            tipChamfer: 1.35,
+            shoulderMargin: 5.5,
+            exampleCode: '472951',
+          },
+          best_a2: {
+            label: 'Best SFIC (A2 System)',
+            pins: 7,
+            macs: 9,
+            tipToFirstPin: 3.81, // mm (0.150")
+            pinSpacing: 3.81,    // mm (0.150")
+            rootDepth: 8.08,     // mm (0.318" altura hoja)
+            depthIncrement: 0.318,// mm (0.0125" incremento sistema A2)
+            cutAngle: 90,        // grados
+            minCut: 0,
+            maxCut: 9,
+            flatWidth: 1.15,
+            tipChamfer: 1.1,
+            shoulderMargin: 4.5,
+            exampleCode: '3618427',
+          },
+          master_m1: {
+            label: 'Master Lock (M1 / 1K)',
+            pins: 4,
+            macs: 5,
+            tipToFirstPin: 5.5,  // mm
+            pinSpacing: 3.96,    // mm
+            rootDepth: 7.57,     // mm (corte 0)
+            depthIncrement: 0.38,// mm por corte
+            cutAngle: 90,        // grados
+            minCut: 0,
+            maxCut: 7,
+            flatWidth: 1.0,
+            tipChamfer: 1.25,
+            shoulderMargin: 5.0,
+            exampleCode: '2536',
+          },
+          yale_y1: {
+            label: 'Yale (Y1)',
+            pins: 5,
+            macs: 4,
+            tipToFirstPin: 5.08, // mm (0.200")
+            pinSpacing: 4.19,    // mm (0.165")
+            rootDepth: 8.28,     // mm (0.326")
+            depthIncrement: 0.48,// mm (0.019")
+            cutAngle: 90,        // grados
+            minCut: 0,
+            maxCut: 9,
+            flatWidth: 1.0,
+            tipChamfer: 1.3,
+            shoulderMargin: 5.5,
+            exampleCode: '35742',
+          },
+        };
+
+        function generateParametricProfile2D(type, bittingCode) {
+          const spec = KEY_SPECS[type];
+          if (!spec) {
+            throw new Error('Perfil de fabricante no soportado: ' + type);
+          }
+
+          const cleanCode = String(bittingCode || '').trim();
+          if (cleanCode.length !== spec.pins || /\D/.test(cleanCode)) {
+            throw new Error(`El código para ${spec.label} debe contener exactamente ${spec.pins} dígitos.`);
+          }
+
+          const digits = cleanCode.split('').map(Number);
+          for (const d of digits) {
+            if (d < spec.minCut || d > spec.maxCut) {
+              throw new Error(`Corte ${d} fuera de rango (${spec.minCut}–${spec.maxCut}) para ${spec.label}.`);
+            }
+          }
+
+          const halfFlat = spec.flatWidth / 2;
+          const halfAngleRad = ((spec.cutAngle / 2) * Math.PI) / 180;
+          const slope = 1 / Math.tan(halfAngleRad);
+          const round = (n) => Math.round(n * 1000) / 1000;
+
+          const points = [];
+          const pushPoint = (x, y) => {
+            const rx = round(x);
+            const ry = round(y);
+            const prev = points[points.length - 1];
+            if (!prev || prev.x !== rx || prev.y !== ry) {
+              points.push({ x: rx, y: ry });
+            }
+          };
+
+          const cuts = digits.map((digit, index) => {
+            const xCenter = spec.tipToFirstPin + index * spec.pinSpacing;
+            const yValley = Math.max(1.2, spec.rootDepth - digit * spec.depthIncrement);
+            return {
+              xLeftFlat: xCenter - halfFlat,
+              xRightFlat: xCenter + halfFlat,
+              yValley,
+            };
+          });
+
+          const tipStartY = 0.85;
+          const tipChamferX = 2.2;
+          const tipChamferMidX = 0.7;
+          const tipChamferMidY = 0.3;
+
+          const firstCut = cuts[0];
+          const xEntry = firstCut.xLeftFlat - (spec.rootDepth - firstCut.yValley) / slope;
+          const tipReachX = Math.min(
+            firstCut.xLeftFlat - 0.35,
+            Math.max(2.6, spec.tipToFirstPin * 0.62)
+          );
+
+          // 1. Ángulo de ataque real en la punta: diagonal desde (0, tipStartY) hasta rootDepth antes del primer pin
+          pushPoint(0, tipStartY);
+          if (xEntry >= tipReachX) {
+            pushPoint(tipReachX, spec.rootDepth);
+            if (xEntry > tipReachX) {
+              pushPoint(xEntry, spec.rootDepth);
+            }
+          } else {
+            const rampSlope = (spec.rootDepth - tipStartY) / tipReachX;
+            const xCross =
+              (firstCut.yValley + slope * firstCut.xLeftFlat - tipStartY) /
+              (rampSlope + slope);
+            const yCross = tipStartY + rampSlope * xCross;
+            pushPoint(Math.max(0.2, xCross), Math.min(spec.rootDepth, yCross));
+          }
+
+          for (let i = 0; i < cuts.length; i++) {
+            const curr = cuts[i];
+            pushPoint(curr.xLeftFlat, curr.yValley);
+            pushPoint(curr.xRightFlat, curr.yValley);
+
+            if (i < cuts.length - 1) {
+              const next = cuts[i + 1];
+              const xRiseEnd = curr.xRightFlat + (spec.rootDepth - curr.yValley) / slope;
+              const xFallStart = next.xLeftFlat - (spec.rootDepth - next.yValley) / slope;
+
+              if (xRiseEnd < xFallStart) {
+                pushPoint(xRiseEnd, spec.rootDepth);
+                pushPoint(xFallStart, spec.rootDepth);
+              } else {
+                const xPeak =
+                  (curr.xRightFlat + next.xLeftFlat + (next.yValley - curr.yValley) / slope) / 2;
+                const yPeak = curr.yValley + slope * (xPeak - curr.xRightFlat);
+                pushPoint(xPeak, Math.min(spec.rootDepth, yPeak));
+              }
+            }
+          }
+
+          const lastCut = cuts[cuts.length - 1];
+          const xExit = lastCut.xRightFlat + (spec.rootDepth - lastCut.yValley) / slope;
+          const lastPinX = spec.tipToFirstPin + (spec.pins - 1) * spec.pinSpacing;
+          const bladeLength = Math.max(xExit + 1.5, lastPinX + spec.shoulderMargin);
+
+          // 2. Transición del cuello (tope de hombro) y mango circular suave (bow)
+          const bowRadius = 13.5;
+          const bowOffsetX = 15.0;
+          const bowCenterX = bladeLength + bowOffsetX;
+          const bowCenterY = spec.rootDepth / 2;
+          const shoulderStop = 1.5;
+          const shoulderTopY = spec.rootDepth + shoulderStop;
+          const shoulderBottomY = -shoulderStop;
+
+          // Cálculo de tangencia exacta C1 entre el cuello del hombro y la circunferencia del mango
+          const dxNeck = bladeLength - bowCenterX;
+          const dyNeck = shoulderTopY - bowCenterY;
+          const distNeck = Math.hypot(dxNeck, dyNeck);
+          const neckAlpha = Math.atan2(dyNeck, dxNeck);
+          const neckBeta = distNeck > bowRadius ? Math.acos(bowRadius / distNeck) : 0;
+          const startAngle = neckAlpha - neckBeta;
+          const endAngle = -startAngle;
+
+          pushPoint(xExit, spec.rootDepth);
+          pushPoint(bladeLength, spec.rootDepth);
+          pushPoint(bladeLength, shoulderTopY);
+
+          // Bucle de 0 a PI generando 49 puntos suaves (>= 40) alrededor del mango circular
+          const bowSegments = 48;
+          for (let i = 0; i <= bowSegments; i++) {
+            const theta = (i / bowSegments) * Math.PI;
+            const angle = startAngle - (theta / Math.PI) * (startAngle - endAngle);
+            const bx = bowCenterX + bowRadius * Math.cos(angle);
+            const by = bowCenterY + bowRadius * Math.sin(angle);
+            pushPoint(bx, by);
+          }
+
+          // Conexión inferior del cuello al hombro y chaflán inferior redondeado de la punta
+          pushPoint(bladeLength, shoulderBottomY);
+          pushPoint(bladeLength, 0);
+          pushPoint(tipChamferX, 0);
+          pushPoint(tipChamferMidX, tipChamferMidY);
+          pushPoint(0, tipStartY);
+
+          // Metadatos del agujero de llavero y dimensiones de la hoja para fresado CSG
+          points.bowHole = {
+            x: round(bowCenterX),
+            y: round(bowCenterY),
+            radius: 3.0,
+          };
+          points.bladeInfo = {
+            bladeLength: round(bladeLength),
+            rootDepth: spec.rootDepth,
+          };
+          points.cutsInfo = cuts.map((c, idx) => ({
+            pin: idx + 1,
+            digit: digits[idx],
+            xCenter: round((c.xLeftFlat + c.xRightFlat) / 2),
+            yValley: round(c.yValley),
+            cutDepth: round(spec.rootDepth - c.yValley),
+            distFromShoulder: round(bladeLength - (c.xLeftFlat + c.xRightFlat) / 2),
+          }));
+
+          return points;
+        }
+
+        let isManualRulerEnabled = false;
+
+        function drawMillimetricRulerOverlay(ctx, profilePoints, layout) {
+          const {
+            cssWidth,
+            cssHeight,
+            minX,
+            maxX,
+            minY,
+            maxY,
+            scale,
+            toCanvasX,
+            toCanvasY,
+          } = layout;
+
+          const bladeInfo = profilePoints.bladeInfo || {
+            bladeLength: Math.max(0, maxX - 28.5),
+            rootDepth: 8.35,
+          };
+          const shoulderX = bladeInfo.bladeLength;
+          const rootDepth = bladeInfo.rootDepth;
+
+          ctx.save();
+
+          // 1. Cuadrícula calibrada cada 1 mm y 5 mm
+          const startMmX = Math.floor(minX);
+          const endMmX = Math.ceil(maxX);
+          for (let mm = startMmX; mm <= endMmX; mm += 1) {
+            const cx = toCanvasX(mm);
+            const relShoulder = Math.round(mm - shoulderX);
+            const isMajor = relShoulder % 5 === 0;
+            ctx.strokeStyle = isMajor ? 'rgba(56, 189, 248, 0.14)' : 'rgba(56, 189, 248, 0.05)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(cx, 24);
+            ctx.lineTo(cx, cssHeight - 24);
+            ctx.stroke();
+          }
+
+          const startMmY = Math.floor(minY);
+          const endMmY = Math.ceil(maxY);
+          for (let mm = startMmY; mm <= endMmY; mm += 1) {
+            const cy = toCanvasY(mm);
+            const isMajor = mm % 5 === 0;
+            ctx.strokeStyle = isMajor ? 'rgba(56, 189, 248, 0.14)' : 'rgba(56, 189, 248, 0.05)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(36, cy);
+            ctx.lineTo(cssWidth - 12, cy);
+            ctx.stroke();
+          }
+
+          // 2. Línea vertical de referencia en el HOMBRO (0 mm)
+          const shoulderCanvasX = toCanvasX(shoulderX);
+          ctx.setLineDash([4, 3]);
+          ctx.strokeStyle = 'rgba(251, 191, 36, 0.85)';
+          ctx.lineWidth = 1.25;
+          ctx.beginPath();
+          ctx.moveTo(shoulderCanvasX, 18);
+          ctx.lineTo(shoulderCanvasX, cssHeight - 22);
+          ctx.stroke();
+
+          // Líneas horizontales de referencia: base de la hoja (0 mm) y profundidad raíz (rootDepth)
+          const baseY = toCanvasY(0);
+          const rootY = toCanvasY(rootDepth);
+          ctx.strokeStyle = 'rgba(16, 185, 129, 0.65)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(36, baseY);
+          ctx.lineTo(shoulderCanvasX, baseY);
+          ctx.moveTo(36, rootY);
+          ctx.lineTo(shoulderCanvasX, rootY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // 3. Regla horizontal superior (distancia en mm respecto al hombro)
+          const rulerTopY = 18;
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.8)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(toCanvasX(minX), rulerTopY);
+          ctx.lineTo(toCanvasX(maxX), rulerTopY);
+          ctx.stroke();
+
+          ctx.font = '9px "JetBrains Mono", monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+
+          // Marcas cada 1 mm desde el hombro hacia punta (-) y mango (+)
+          for (let offsetMm = -Math.ceil(shoulderX - minX); offsetMm <= Math.floor(maxX - shoulderX); offsetMm += 1) {
+            const worldX = shoulderX + offsetMm;
+            if (worldX < minX - 0.5 || worldX > maxX + 0.5) continue;
+            const cx = toCanvasX(worldX);
+            const isMajor5 = offsetMm % 5 === 0;
+            const tickLen = isMajor5 ? 7 : 3.5;
+
+            ctx.strokeStyle = offsetMm === 0 ? '#fbbf24' : isMajor5 ? '#cbd5e1' : 'rgba(148, 163, 184, 0.55)';
+            ctx.beginPath();
+            ctx.moveTo(cx, rulerTopY);
+            ctx.lineTo(cx, rulerTopY - tickLen);
+            ctx.stroke();
+
+            if (isMajor5) {
+              ctx.fillStyle = offsetMm === 0 ? '#fbbf24' : '#94a3b8';
+              const label = offsetMm === 0 ? '0(H)' : `${offsetMm}`;
+              ctx.fillText(label, cx, rulerTopY - 8);
+            }
+          }
+
+          // 4. Regla vertical izquierda (altura en mm desde la base 0 mm de la hoja)
+          const rulerLeftX = 36;
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.8)';
+          ctx.beginPath();
+          ctx.moveTo(rulerLeftX, toCanvasY(maxY));
+          ctx.lineTo(rulerLeftX, toCanvasY(minY));
+          ctx.stroke();
+
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'middle';
+          for (let mm = Math.ceil(minY); mm <= Math.floor(maxY); mm += 1) {
+            const cy = toCanvasY(mm);
+            const isMajor = mm % 2 === 0;
+            const tickLen = isMajor ? 6 : 3;
+            ctx.strokeStyle = mm === 0 ? '#34d399' : isMajor ? '#cbd5e1' : 'rgba(148, 163, 184, 0.55)';
+            ctx.beginPath();
+            ctx.moveTo(rulerLeftX, cy);
+            ctx.lineTo(rulerLeftX - tickLen, cy);
+            ctx.stroke();
+
+            if (isMajor) {
+              ctx.fillStyle = mm === 0 ? '#34d399' : '#94a3b8';
+              ctx.fillText(`${mm}`, rulerLeftX - 8, cy);
+            }
+          }
+
+          // Leyenda compacta en esquina superior derecha (sin solapar cotas de pines)
+          ctx.fillStyle = '#34d399';
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'top';
+          ctx.fillText(`Base 0 mm · Raíz ${rootDepth.toFixed(2)} mm`, cssWidth - 14, 24);
+
+          // 5. Cotas de profundidad de corte para cada pin respecto al lomo superior (rootDepth)
+          if (Array.isArray(profilePoints.cutsInfo)) {
+            ctx.font = '9px "JetBrains Mono", monospace';
+            ctx.textAlign = 'center';
+            for (const cut of profilePoints.cutsInfo) {
+              const cx = toCanvasX(cut.xCenter);
+              const cyValley = toCanvasY(cut.yValley);
+
+              // Línea vertical de cota desde el lomo raíz hasta el fondo del corte
+              ctx.strokeStyle = 'rgba(251, 191, 36, 0.85)';
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.moveTo(cx, rootY);
+              ctx.lineTo(cx, cyValley);
+              ctx.stroke();
+
+              // Punto marcador en el fondo del valle
+              ctx.fillStyle = '#fbbf24';
+              ctx.beginPath();
+              ctx.arc(cx, cyValley, 2.3, 0, Math.PI * 2);
+              ctx.fill();
+
+              // Profundidad de corte en mm (alternando altura de texto si los pines están muy juntos)
+              const labelY = cut.pin % 2 === 1 ? rootY - 4 : rootY - 14;
+              ctx.textBaseline = 'bottom';
+              ctx.fillStyle = '#fde68a';
+              ctx.fillText(`-${cut.cutDepth.toFixed(1)}`, cx, Math.max(30, labelY));
+            }
+          }
+
+          ctx.restore();
+        }
+
+        function drawProfileOnCanvas(canvasId, profilePoints) {
+          const canvas = document.getElementById(canvasId);
+          if (!canvas) return;
+
+          const cssWidth = canvas.clientWidth;
+          const cssHeight = canvas.clientHeight;
+          if (cssWidth === 0 || cssHeight === 0) return;
+
+          const dpr = window.devicePixelRatio || 1;
+          canvas.width = Math.round(cssWidth * dpr);
+          canvas.height = Math.round(cssHeight * dpr);
+
+          const ctx = canvas.getContext('2d');
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+          ctx.strokeStyle = 'rgba(34, 211, 238, 0.06)';
+          ctx.lineWidth = 1;
+          for (let x = 24; x < cssWidth; x += 24) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, cssHeight);
+            ctx.stroke();
+          }
+          for (let y = 24; y < cssHeight; y += 24) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(cssWidth, y);
+            ctx.stroke();
+          }
+
+          if (!profilePoints || profilePoints.length < 3) {
+            ctx.fillStyle = '#6b7280';
+            ctx.font = '13px "JetBrains Mono", monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(
+              'Introduce un código válido y pulsa "Generar Perfil"',
+              cssWidth / 2,
+              cssHeight / 2
+            );
+            return;
+          }
+
+          let minX = Infinity;
+          let maxX = -Infinity;
+          let minY = Infinity;
+          let maxY = -Infinity;
+
+          for (const pt of profilePoints) {
+            if (pt.x < minX) minX = pt.x;
+            if (pt.x > maxX) maxX = pt.x;
+            if (pt.y < minY) minY = pt.y;
+            if (pt.y > maxY) maxY = pt.y;
+          }
+
+          const shapeWidth = Math.max(1, maxX - minX);
+          const shapeHeight = Math.max(1, maxY - minY);
+          const padLeft = isManualRulerEnabled ? 46 : 24;
+          const padRight = 24;
+          const padTop = isManualRulerEnabled ? 30 : 24;
+          const padBottom = 26;
+          const availW = Math.max(1, cssWidth - padLeft - padRight);
+          const availH = Math.max(1, cssHeight - padTop - padBottom);
+          const scale = Math.min(availW / shapeWidth, availH / shapeHeight);
+
+          const drawW = shapeWidth * scale;
+          const drawH = shapeHeight * scale;
+          const offsetX = padLeft + (availW - drawW) / 2;
+          const offsetY = padTop + (availH - drawH) / 2;
+
+          const toCanvasX = (x) => offsetX + (x - minX) * scale;
+          const toCanvasY = (y) => offsetY + (maxY - y) * scale;
+
+          if (isManualRulerEnabled) {
+            drawMillimetricRulerOverlay(ctx, profilePoints, {
+              cssWidth,
+              cssHeight,
+              minX,
+              maxX,
+              minY,
+              maxY,
+              scale,
+              toCanvasX,
+              toCanvasY,
+            });
+          }
+
+          ctx.fillStyle = 'rgba(156, 163, 175, 0.7)';
+          ctx.font = '11px "JetBrains Mono", monospace';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText('PUNTA', offsetX, offsetY + drawH + 18);
+          ctx.textAlign = 'right';
+          ctx.fillText('MANGO', offsetX + drawW, offsetY + drawH + 18);
+
+          ctx.beginPath();
+          ctx.moveTo(toCanvasX(profilePoints[0].x), toCanvasY(profilePoints[0].y));
+          for (let i = 1; i < profilePoints.length; i++) {
+            ctx.lineTo(toCanvasX(profilePoints[i].x), toCanvasY(profilePoints[i].y));
+          }
+          ctx.closePath();
+
+          if (profilePoints.bowHole) {
+            const { x: hx, y: hy, radius: hr } = profilePoints.bowHole;
+            ctx.moveTo(toCanvasX(hx) + hr * scale, toCanvasY(hy));
+            ctx.arc(toCanvasX(hx), toCanvasY(hy), hr * scale, 0, Math.PI * 2, true);
+          }
+
+          ctx.fillStyle = 'rgba(34, 211, 238, 0.18)';
+          ctx.fill('evenodd');
+
+          ctx.lineWidth = 2.25;
+          ctx.lineJoin = 'round';
+          ctx.strokeStyle = '#22d3ee';
+          ctx.stroke();
+
+          ctx.fillStyle = '#67e8f9';
+          for (const pt of profilePoints) {
+            ctx.beginPath();
+            ctx.arc(toCanvasX(pt.x), toCanvasY(pt.y), 1.9, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        /* === FIN DICCIONARIO DE DATOS Y MOTOR PARAMÉTRICO (FASE 3) === */
+
+        const manualForm = document.getElementById('manual-form');
+        const selectManufacturer = document.getElementById('select-manufacturer');
+        const manufacturerHint = document.getElementById('manufacturer-hint');
+        const inputBitting = document.getElementById('input-bitting');
+        const bittingFeedback = document.getElementById('bitting-feedback');
+        const manualStatus = document.getElementById('manual-status');
+        const manualMacsWarning = document.getElementById('manual-macs-warning');
+        const manualProfileMetrics = document.getElementById('manual-profile-metrics');
+        const btnGenerateProfile = document.getElementById('btn-generate-profile');
+        const btnLoadExample = document.getElementById('btn-load-example');
+        const btnGenerateQr = document.getElementById('btn-generate-qr');
+        const btnExportAuditTxt = document.getElementById('btn-export-audit-txt');
+        const btnToggleRuler = document.getElementById('btn-toggle-ruler');
+        const rulerToggleLabel = document.getElementById('ruler-toggle-label');
+        const manualQrPanel = document.getElementById('manual-qr-panel');
+        const qrCanvas = document.getElementById('qr-canvas');
+        const qrSummaryLabel = document.getElementById('qr-summary-label');
+        const qrPayloadPreview = document.getElementById('qr-payload-preview');
+        const btnDownloadQr = document.getElementById('btn-download-qr');
+        const btnCopyQrPayload = document.getElementById('btn-copy-qr-payload');
+        const btnCloseQr = document.getElementById('btn-close-qr');
+        let lastManualAuditSnapshot = null;
+        let lastQrPayloadText = '';
+        let lastQrFilename = 'keyforge_qr.png';
+
+        if (btnLoadExample) {
+          btnLoadExample.addEventListener('click', () => {
+            const spec = KEY_SPECS[selectManufacturer.value];
+            if (!spec) return;
+            inputBitting.value = spec.exampleCode;
+            manualStatus.textContent = '';
+            if (validateBittingRealtime({ isSubmit: false })) {
+              manualForm.dispatchEvent(new Event('submit', { cancelable: true }));
+            }
+          });
+        }
+
+        if (btnToggleRuler) {
+          btnToggleRuler.addEventListener('click', () => {
+            isManualRulerEnabled = !isManualRulerEnabled;
+            btnToggleRuler.setAttribute('aria-pressed', String(isManualRulerEnabled));
+            if (isManualRulerEnabled) {
+              btnToggleRuler.classList.remove('bg-gray-900', 'border-gray-700', 'text-gray-300');
+              btnToggleRuler.classList.add('bg-cyan-500/15', 'border-cyan-400', 'text-cyan-300');
+              if (rulerToggleLabel) rulerToggleLabel.textContent = 'Regla mm: ON';
+            } else {
+              btnToggleRuler.classList.remove('bg-cyan-500/15', 'border-cyan-400', 'text-cyan-300');
+              btnToggleRuler.classList.add('bg-gray-900', 'border-gray-700', 'text-gray-300');
+              if (rulerToggleLabel) rulerToggleLabel.textContent = 'Regla mm: OFF';
+            }
+            drawProfileOnCanvas('cvs-manual-preview', lastManualProfile || []);
+          });
+        }
+
+        const inputBorderNeutralClasses = ['border-gray-600', 'focus:border-cyan-400', 'focus:ring-cyan-400/40'];
+        const inputBorderInvalidClasses = ['border-red-500', 'focus:border-red-500', 'focus:ring-red-500/40'];
+        const inputBorderValidClasses = ['border-emerald-500', 'focus:border-emerald-400', 'focus:ring-emerald-400/40'];
+
+        function setBittingVisualState(state, message) {
+          inputBitting.classList.remove(
+            ...inputBorderNeutralClasses,
+            ...inputBorderInvalidClasses,
+            ...inputBorderValidClasses
+          );
+          bittingFeedback.classList.remove('text-gray-400', 'text-red-400', 'text-emerald-400');
+
+          if (state === 'invalid') {
+            inputBitting.classList.add(...inputBorderInvalidClasses);
+            inputBitting.setAttribute('aria-invalid', 'true');
+            bittingFeedback.classList.add('text-red-400');
+          } else if (state === 'valid') {
+            inputBitting.classList.add(...inputBorderValidClasses);
+            inputBitting.setAttribute('aria-invalid', 'false');
+            bittingFeedback.classList.add('text-emerald-400');
+          } else {
+            inputBitting.classList.add(...inputBorderNeutralClasses);
+            inputBitting.setAttribute('aria-invalid', 'false');
+            bittingFeedback.classList.add('text-gray-400');
+          }
+
+          bittingFeedback.textContent = message;
+        }
+
+        function setMacsAlert(violated, detail) {
+          if (violated) {
+            manualMacsWarning.textContent =
+              `Violación de MACS: Llave mecánicamente inviable (${detail}).`;
+            manualMacsWarning.classList.remove('hidden');
+          } else {
+            manualMacsWarning.textContent = '';
+            manualMacsWarning.classList.add('hidden');
+          }
+        }
+
+        function validateBittingRealtime({ isSubmit = false } = {}) {
+          const spec = KEY_SPECS[selectManufacturer.value];
+          if (!spec) {
+            btnGenerateProfile.disabled = true;
+            if (btnGenerateQr) btnGenerateQr.disabled = true;
+            return false;
+          }
+
+          const code = inputBitting.value.trim();
+
+          if (code.length === 0) {
+            setMacsAlert(false);
+            btnGenerateProfile.disabled = true;
+            if (btnGenerateQr) btnGenerateQr.disabled = true;
+            if (isSubmit) {
+              setBittingVisualState(
+                'invalid',
+                `Código requerido para ${spec.label}: introduce ${spec.pins} dígitos entre ${spec.minCut} y ${spec.maxCut}.`
+              );
+              return false;
+            }
+            setBittingVisualState(
+              'neutral',
+              `Introduce ${spec.pins} dígitos entre ${spec.minCut} y ${spec.maxCut} (de punta a hombro).`
+            );
+            return false;
+          }
+
+          const errors = [];
+
+          // a) Validación de caracteres numéricos
+          const hasNonDigits = /\D/.test(code);
+          if (hasNonDigits) {
+            errors.push(`Caracteres no numéricos no permitidos (usa dígitos ${spec.minCut}–${spec.maxCut})`);
+          }
+
+          // b) Validación de rango de cortes permitidos para el fabricante
+          const outOfRange = [];
+          for (const ch of code) {
+            if (ch >= '0' && ch <= '9') {
+              const num = Number(ch);
+              if (num < spec.minCut || num > spec.maxCut) {
+                if (!outOfRange.includes(ch)) outOfRange.push(ch);
+              }
+            }
+          }
+          if (outOfRange.length > 0) {
+            errors.push(
+              `Corte fuera de rango (${outOfRange.join(', ')}) para ${spec.label}: rango válido ${spec.minCut}–${spec.maxCut}`
+            );
+          }
+
+          // c) Validación de longitud exacta requerida (4, 5, 6 o 7 pines)
+          if (code.length !== spec.pins) {
+            errors.push(
+              `Longitud requerida para ${spec.label}: ${spec.pins} dígitos (actual: ${code.length})`
+            );
+          }
+
+          // d) Validación de MACS (Maximum Adjacent Cut Specification)
+          let macsDetail = '';
+          for (let i = 0; i < code.length - 1; i++) {
+            const a = code[i];
+            const b = code[i + 1];
+            if (a >= '0' && a <= '9' && b >= '0' && b <= '9') {
+              const diff = Math.abs(Number(a) - Number(b));
+              if (diff > spec.macs) {
+                macsDetail = `pines ${i + 1}–${i + 2}: |${a}−${b}| = ${diff} > MACS ${spec.macs}`;
+                break;
+              }
+            }
+          }
+
+          const hasMacsViolation = macsDetail.length > 0;
+          setMacsAlert(hasMacsViolation, macsDetail);
+
+          if (errors.length > 0 || hasMacsViolation) {
+            btnGenerateProfile.disabled = true;
+            if (btnGenerateQr) btnGenerateQr.disabled = true;
+            const feedbackMessage =
+              errors.length > 0
+                ? errors.join(' · ')
+                : `Los cortes adyacentes exceden el límite MACS (${spec.macs}) de ${spec.label}.`;
+            setBittingVisualState('invalid', feedbackMessage);
+            return false;
+          }
+
+          btnGenerateProfile.disabled = false;
+          if (btnGenerateQr) btnGenerateQr.disabled = false;
+          setBittingVisualState(
+            'valid',
+            isSubmit
+              ? `Código ${code} validado para ${spec.label}.`
+              : `Código ${code} válido y mecánicamente viable para ${spec.label}.`
+          );
+          return true;
+        }
+
+        function updateManufacturerHint() {
+          const spec = KEY_SPECS[selectManufacturer.value];
+          if (!spec) return;
+          manufacturerHint.textContent =
+            `${spec.pins} pines · MACS ${spec.macs} · cortes ${spec.minCut}–${spec.maxCut} · punta ${spec.tipToFirstPin} mm · paso ${spec.pinSpacing} mm`;
+          inputBitting.maxLength = spec.pins;
+          inputBitting.placeholder = `Ej: ${spec.exampleCode}`;
+        }
+
+        inputBitting.addEventListener('input', () => {
+          manualStatus.textContent = '';
+          validateBittingRealtime({ isSubmit: false });
+        });
+
+        selectManufacturer.addEventListener('change', () => {
+          updateManufacturerHint();
+          manualStatus.textContent = '';
+          validateBittingRealtime({ isSubmit: false });
+        });
+
+        manualForm.addEventListener('submit', (event) => {
+          event.preventDefault();
+          const type = selectManufacturer.value;
+          const spec = KEY_SPECS[type];
+          const code = inputBitting.value.trim();
+
+          if (!spec) return;
+
+          if (!validateBittingRealtime({ isSubmit: true })) {
+            manualStatus.textContent = '';
+            inputBitting.focus();
+            return;
+          }
+
+          const profilePoints = generateParametricProfile2D(type, code);
+          window.extractedProfile2D = profilePoints;
+          lastProfileSource = 'manual';
+          lastManualProfile = profilePoints;
+
+          drawProfileOnCanvas('cvs-manual-preview', profilePoints);
+
+          const xs = profilePoints.map((p) => p.x);
+          const ys = profilePoints.map((p) => p.y);
+          const totalLength = Math.max(...xs) - Math.min(...xs);
+          const totalHeight = Math.max(...ys) - Math.min(...ys);
+
+          lastManualAuditSnapshot = {
+            type,
+            spec,
+            code,
+            profilePoints,
+            totalLength,
+            totalHeight,
+            generatedAt: new Date(),
+          };
+          if (btnExportAuditTxt) {
+            btnExportAuditTxt.disabled = false;
+          }
+
+          manualStatus.textContent =
+            `Perfil generado: ${spec.label} [${code}] · ${spec.pins} pines · ${profilePoints.length} vértices`;
+          manualProfileMetrics.textContent =
+            `${totalLength.toFixed(2)} × ${totalHeight.toFixed(2)} mm`;
+          viewerSubstatus.textContent =
+            `Perfil paramétrico listo: ${spec.label} · Cortes ${code}.`;
+          window.__activeKeyFilenameBase = `${type}_${code}`;
+
+          // Integración Fase 4: extruir automáticamente el perfil en Three.js
+          if (typeof window.generate3DModel === 'function') {
+            window.generate3DModel(window.extractedProfile2D);
+          }
+
+          if (manualQrPanel && !manualQrPanel.classList.contains('hidden')) {
+            generateAndShowQr();
+          }
+        });
+
+        function buildManualAuditReportText(snapshot) {
+          const { type, spec, code, profilePoints, totalLength, totalHeight, generatedAt } = snapshot;
+          const digits = code.split('').map(Number);
+          let maxAdjacentDiff = 0;
+          for (let i = 0; i < digits.length - 1; i++) {
+            const diff = Math.abs(digits[i] - digits[i + 1]);
+            if (diff > maxAdjacentDiff) maxAdjacentDiff = diff;
+          }
+
+          const thicknessEl = document.getElementById('input-thickness');
+          const parsedThickness = thicknessEl ? parseFloat(thicknessEl.value) : 2.2;
+          const thicknessMm =
+            Number.isFinite(parsedThickness) && parsedThickness > 0 ? parsedThickness : 2.2;
+
+          const selectMatEl = document.getElementById('select-print-material');
+          const materialLabel =
+            selectMatEl && selectMatEl.selectedOptions && selectMatEl.selectedOptions[0]
+              ? selectMatEl.selectedOptions[0].textContent
+              : 'Acero Inoxidable';
+
+          const bladeInfo = profilePoints.bladeInfo || {
+            bladeLength: Math.max(0, totalLength - 28.5),
+            rootDepth: spec.rootDepth,
+          };
+          const bowHole = profilePoints.bowHole || { x: 0, y: 0, radius: 3.0 };
+          const cutsInfo = Array.isArray(profilePoints.cutsInfo) ? profilePoints.cutsInfo : [];
+
+          const grooveLength = Math.max(8, bladeInfo.bladeLength + 0.5);
+          const grooveHeight = Math.min(2.0, Math.max(1.2, bladeInfo.rootDepth * 0.24));
+          const grooveCutDepth = Math.min(0.8, thicknessMm * 0.38);
+
+          const pad = (val, width) => String(val).padEnd(width, ' ');
+          const lines = [
+            '========================================================================',
+            'KEYFORGE WEB - INFORME TÉCNICO DE AUDITORÍA FÍSICA DE LLAVE',
+            '========================================================================',
+            `Fecha de generación : ${generatedAt.toISOString()}`,
+            `Identificador perfil: ${type.toUpperCase()}`,
+            `Fabricante / Modelo : ${spec.label}`,
+            `Código de cortes    : ${code}`,
+            `Estado MACS         : VIABLE (máx. salto adyacente ${maxAdjacentDiff} <= MACS ${spec.macs})`,
+            '',
+            '------------------------------------------------------------------------',
+            '1. ESPECIFICACIONES DEL FABRICANTE',
+            '------------------------------------------------------------------------',
+            `Número de pines              : ${spec.pins}`,
+            `Rango de cortes válido       : ${spec.minCut} - ${spec.maxCut}`,
+            `MACS (máx. salto adyacente)  : ${spec.macs}`,
+            `Distancia punta a pin #1     : ${spec.tipToFirstPin.toFixed(3)} mm`,
+            `Separación entre pines       : ${spec.pinSpacing.toFixed(3)} mm`,
+            `Profundidad raíz (corte 0)   : ${spec.rootDepth.toFixed(3)} mm`,
+            `Incremento por corte         : ${spec.depthIncrement.toFixed(3)} mm`,
+            `Ángulo de fresado de corte   : ${spec.cutAngle} deg`,
+            `Ancho plano de fondo (valle) : ${spec.flatWidth.toFixed(3)} mm`,
+            '',
+            '------------------------------------------------------------------------',
+            '2. DIMENSIONES GENERALES Y FRESADO 3D',
+            '------------------------------------------------------------------------',
+            `Longitud de hoja (punta-hombro): ${bladeInfo.bladeLength.toFixed(3)} mm`,
+            `Longitud total (con mango)     : ${totalLength.toFixed(3)} mm`,
+            `Altura total máxima (mango)    : ${totalHeight.toFixed(3)} mm`,
+            `Grosor de extrusión (eje Z)    : ${thicknessMm.toFixed(2)} mm`,
+            `Surco lateral (warding CSG)    : ${grooveLength.toFixed(2)} x ${grooveHeight.toFixed(2)} x ${grooveCutDepth.toFixed(2)} mm (rebaje frontal)`,
+            `Orificio de llavero            : Centro (${bowHole.x.toFixed(2)}, ${bowHole.y.toFixed(2)}) mm · Diámetro ${(bowHole.radius * 2).toFixed(2)} mm`,
+            `Vértices del contorno 2D       : ${profilePoints.length}`,
+            `Material visualizado           : ${materialLabel}`,
+            '',
+            '------------------------------------------------------------------------',
+            '3. TABLA DE PROFUNDIDADES DE FRESADO POR PIN',
+            '------------------------------------------------------------------------',
+            `${pad('PIN', 5)} | ${pad('CORTE', 6)} | ${pad('DIST. PUNTA', 13)} | ${pad('DIST. HOMBRO', 14)} | ${pad('PROF. FRESADO', 15)} | ALTURA RESTANTE`,
+            '------------------------------------------------------------------------',
+          ];
+
+          for (const cut of cutsInfo) {
+            lines.push(
+              `${pad('#' + cut.pin, 5)} | ${pad(cut.digit, 6)} | ${pad(cut.xCenter.toFixed(3) + ' mm', 13)} | ${pad(cut.distFromShoulder.toFixed(3) + ' mm', 14)} | ${pad(cut.cutDepth.toFixed(3) + ' mm', 15)} | ${cut.yValley.toFixed(3)} mm`
+            );
+          }
+
+          lines.push(
+            '========================================================================',
+            'Generado localmente por KeyForge Web (100% procesamiento en cliente).',
+            ''
+          );
+
+          return lines.join('\n');
+        }
+
+        function exportManualAuditTxt() {
+          if (!lastManualAuditSnapshot) return;
+          const reportText = buildManualAuditReportText(lastManualAuditSnapshot);
+          const blob = new Blob([reportText], { type: 'text/plain;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+
+          const link = document.createElement('a');
+          link.style.display = 'none';
+          link.href = url;
+          link.download = `auditoria_${lastManualAuditSnapshot.type}_${lastManualAuditSnapshot.code}.txt`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          setTimeout(() => {
+            URL.revokeObjectURL(url);
+          }, 150);
+        }
+
+        if (btnExportAuditTxt) {
+          btnExportAuditTxt.addEventListener('click', exportManualAuditTxt);
+        }
+
+        function buildKeyQrPayload(type, spec, code) {
+          const digits = code.split('').map(Number);
+          const round3 = (n) => Math.round(n * 1000) / 1000;
+          return JSON.stringify(
+            {
+              app: 'KeyForgeWeb',
+              profile: type,
+              manufacturer: spec.label,
+              bitting: code,
+              pins: spec.pins,
+              macs: spec.macs,
+              tipToFirstPinMm: spec.tipToFirstPin,
+              pinSpacingMm: spec.pinSpacing,
+              rootDepthMm: spec.rootDepth,
+              depthIncrementMm: spec.depthIncrement,
+              cutAngleDeg: spec.cutAngle,
+              cutsDepthMm: digits.map((d) => round3(d * spec.depthIncrement)),
+            },
+            null,
+            2
+          );
+        }
+
+        function renderQrToCanvas(payloadText) {
+          if (!qrCanvas || typeof window.qrcode !== 'function') {
+            return false;
+          }
+
+          const qr = window.qrcode(0, 'M');
+          qr.addData(payloadText, 'Byte');
+          qr.make();
+
+          const moduleCount = qr.getModuleCount();
+          const quietZone = 4;
+          const totalModules = moduleCount + quietZone * 2;
+          const targetPx = 220;
+          const cellSize = Math.max(2, Math.floor(targetPx / totalModules));
+          const canvasSize = totalModules * cellSize;
+
+          qrCanvas.width = canvasSize;
+          qrCanvas.height = canvasSize;
+
+          const ctx = qrCanvas.getContext('2d');
+          ctx.imageSmoothingEnabled = false;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvasSize, canvasSize);
+
+          ctx.fillStyle = '#090d16';
+          for (let r = 0; r < moduleCount; r++) {
+            for (let c = 0; c < moduleCount; c++) {
+              if (qr.isDark(r, c)) {
+                ctx.fillRect(
+                  (c + quietZone) * cellSize,
+                  (r + quietZone) * cellSize,
+                  cellSize,
+                  cellSize
+                );
+              }
+            }
+          }
+
+          return true;
+        }
+
+        function generateAndShowQr() {
+          if (!validateBittingRealtime({ isSubmit: true })) {
+            inputBitting.focus();
+            return;
+          }
+
+          const type = selectManufacturer.value;
+          const spec = KEY_SPECS[type];
+          const code = inputBitting.value.trim();
+          if (!spec) return;
+
+          const payload = buildKeyQrPayload(type, spec, code);
+          lastQrPayloadText = payload;
+          lastQrFilename = `qr_${type}_${code}.png`;
+
+          if (qrSummaryLabel) {
+            qrSummaryLabel.textContent = `${spec.label} · Bitting [${code}] · ${spec.pins} pines`;
+          }
+
+          const rendered = renderQrToCanvas(payload);
+          if (qrPayloadPreview) {
+            qrPayloadPreview.textContent = rendered
+              ? payload
+              : 'No se pudo cargar la librería QR externa. Verifica tu conexión a internet.\n\n' + payload;
+          }
+
+          if (manualQrPanel) {
+            manualQrPanel.classList.remove('hidden');
+          }
+        }
+
+        if (btnGenerateQr) {
+          btnGenerateQr.addEventListener('click', generateAndShowQr);
+        }
+
+        if (btnCloseQr) {
+          btnCloseQr.addEventListener('click', () => {
+            if (manualQrPanel) manualQrPanel.classList.add('hidden');
+          });
+        }
+
+        if (btnDownloadQr) {
+          btnDownloadQr.addEventListener('click', () => {
+            if (!qrCanvas || !lastQrPayloadText) return;
+            const dataUrl = qrCanvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.style.display = 'none';
+            link.href = dataUrl;
+            link.download = lastQrFilename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          });
+        }
+
+        if (btnCopyQrPayload) {
+          btnCopyQrPayload.addEventListener('click', async () => {
+            if (!lastQrPayloadText) return;
+            try {
+              if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                await navigator.clipboard.writeText(lastQrPayloadText);
+                const original = btnCopyQrPayload.textContent;
+                btnCopyQrPayload.textContent = 'Copiado';
+                setTimeout(() => {
+                  btnCopyQrPayload.textContent = original;
+                }, 1400);
+              }
+            } catch (_) {
+              // Ignorar si el navegador bloquea el portapapeles sin foco
+            }
+          });
+        }
+
+        window.addEventListener('resize', () => {
+          if (!panelManual.classList.contains('hidden')) {
+            drawProfileOnCanvas('cvs-manual-preview', lastManualProfile || []);
+          }
+        });
+
+        updateManufacturerHint();
+        validateBittingRealtime({ isSubmit: false });
+      })();
+    </script>
+
+    <!-- [4. INICIO MOTOR THREE.JS - Escena, OrbitControls, Extrusión 3D y Exportación STL] -->
+    <script>
+      // Variables globales para la escena 3D y controles
+      let scene = null;
+      let camera = null;
+      let renderer = null;
+      let controls = null;
+      let currentMesh = null;
+
+      (function () {
+        'use strict';
+
+        let animFrameId = null;
+        let isSoftwareGl = false;
+        let studioEnvMap = null;
+        let metalPbrMaps = null;
+        let showcaseRotateEnabled = false;
+        let isUserInteracting = false;
+        let lastInteractionEndTime = 0;
+        let lastFrameTime = performance.now();
+
+        const viewerContainer = document.getElementById('viewer-3d');
+        const viewerPlaceholder = document.getElementById('viewer-placeholder');
+        const viewerHud = document.getElementById('viewer-hud');
+        const viewerMeshStats = document.getElementById('viewer-mesh-stats');
+        const btnDownloadStl = document.getElementById('btn-download-stl');
+        const btnCaptureScreenshot = document.getElementById('btn-capture-screenshot');
+        const btnShowcaseRotate = document.getElementById('btn-showcase-rotate');
+        const btnResetCamera = document.getElementById('btn-reset-camera');
+        const showcaseRotateLabel = document.getElementById('showcase-rotate-label');
+        const selectPrintMaterial = document.getElementById('select-print-material');
+        let lastFittedCameraState = null;
+
+        // Catálogo de materiales físicos y su configuración PBR (color, metalness, roughness)
+        const PRINT_MATERIALS = {
+          steel: {
+            label: 'Acero Inoxidable',
+            color: 0xc6cfd9,
+            metalness: 0.9,
+            roughness: 0.36,
+            envMapIntensity: 1.35,
+            normalScale: 0.28,
+          },
+          brass: {
+            label: 'Latón Clásico',
+            color: 0xd4af37,
+            metalness: 0.92,
+            roughness: 0.3,
+            envMapIntensity: 1.4,
+            normalScale: 0.26,
+          },
+          aluminum: {
+            label: 'Aluminio Anodizado',
+            color: 0xdbe2ea,
+            metalness: 0.82,
+            roughness: 0.44,
+            envMapIntensity: 1.15,
+            normalScale: 0.24,
+          },
+          copper: {
+            label: 'Bronce / Cobre',
+            color: 0xb87333,
+            metalness: 0.9,
+            roughness: 0.34,
+            envMapIntensity: 1.3,
+            normalScale: 0.28,
+          },
+          pla_matte: {
+            label: 'PLA / Resina Prototipo',
+            color: 0x38bdf8,
+            metalness: 0.08,
+            roughness: 0.68,
+            envMapIntensity: 0.65,
+            normalScale: 0.14,
+          },
+        };
+
+        function getSelectedPrintMaterialPreset() {
+          const key = selectPrintMaterial ? selectPrintMaterial.value : 'steel';
+          return PRINT_MATERIALS[key] || PRINT_MATERIALS.steel;
+        }
+
+        function applyPrintMaterialToMesh(mesh) {
+          if (!mesh || !mesh.material) return;
+          const preset = getSelectedPrintMaterialPreset();
+          const mat = mesh.material;
+          mat.color.setHex(preset.color);
+          mat.metalness = preset.metalness;
+          mat.roughness = preset.roughness;
+          mat.envMapIntensity = preset.envMapIntensity;
+          if (mat.normalScale) {
+            mat.normalScale.set(preset.normalScale, preset.normalScale);
+          }
+          mat.needsUpdate = true;
+        }
+
+        function detectSoftwareWebGL() {
+          try {
+            const probe = document.createElement('canvas');
+            const gl = probe.getContext('webgl2') || probe.getContext('webgl');
+            if (!gl) return true;
+            const ext = gl.getExtension('WEBGL_debug_renderer_info');
+            const gpu = String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
+            const loseCtx = gl.getExtension('WEBGL_lose_context');
+            if (loseCtx) loseCtx.loseContext();
+            return /SwiftShader|llvmpipe|softpipe|Software|Basic Render/i.test(gpu);
+          } catch (_) {
+            return true;
+          }
+        }
+
+        function buildStudioEnvMap(webGLRenderer) {
+          try {
+            if (typeof THREE.PMREMGenerator !== 'function') return null;
+            const pmrem = new THREE.PMREMGenerator(webGLRenderer);
+            pmrem.compileEquirectangularShader();
+
+            const envScene = new THREE.Scene();
+            envScene.background = new THREE.Color(0x111827);
+
+            const panelMatTop = new THREE.MeshBasicMaterial({ color: 0xe0f2fe });
+            const panelTop = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), panelMatTop);
+            panelTop.position.set(0, 12, 0);
+            panelTop.rotation.x = Math.PI / 2;
+            envScene.add(panelTop);
+
+            const panelMatSide = new THREE.MeshBasicMaterial({ color: 0x67e8f9 });
+            const panelSide = new THREE.Mesh(new THREE.PlaneGeometry(16, 10), panelMatSide);
+            panelSide.position.set(12, 2, 8);
+            panelSide.lookAt(0, 0, 0);
+            envScene.add(panelSide);
+
+            const panelMatBack = new THREE.MeshBasicMaterial({ color: 0x94a3b8 });
+            const panelBack = new THREE.Mesh(new THREE.PlaneGeometry(18, 12), panelMatBack);
+            panelBack.position.set(-10, -4, -10);
+            panelBack.lookAt(0, 0, 0);
+            envScene.add(panelBack);
+
+            const renderTarget = pmrem.fromScene(envScene, 0.04);
+            panelTop.geometry.dispose();
+            panelMatTop.dispose();
+            panelSide.geometry.dispose();
+            panelMatSide.dispose();
+            panelBack.geometry.dispose();
+            panelMatBack.dispose();
+            pmrem.dispose();
+
+            return renderTarget.texture;
+          } catch (_) {
+            return null;
+          }
+        }
+
+        function buildBrushedMetalPBRMaps(webGLRenderer) {
+          try {
+            const size = 256;
+            const heightField = new Float32Array(size * size);
+
+            // PRNG determinista (LCG) para textura reproducible de metal cepillado sin activos externos
+            let seed = 133742;
+            const nextRand = () => {
+              seed = (seed * 1664525 + 1013904223) >>> 0;
+              return seed / 4294967296;
+            };
+
+            const rowBase = new Float32Array(size);
+            for (let y = 0; y < size; y++) {
+              rowBase[y] = nextRand();
+            }
+
+            // Campo de alturas continuo y periódico (sin costuras) combinando estrías longitudinales y micrograno
+            for (let y = 0; y < size; y++) {
+              const yPrev = (y - 1 + size) % size;
+              const yNext = (y + 1) % size;
+              const streak = rowBase[y] * 0.55 + (rowBase[yPrev] + rowBase[yNext]) * 0.225;
+              const phase = nextRand() * Math.PI * 2;
+              for (let x = 0; x < size; x++) {
+                const u = (x / size) * Math.PI * 2;
+                const brushWave = 0.5 + 0.35 * Math.sin(u * 2 + phase) + 0.15 * Math.cos(u * 5 - phase);
+                const microGrain = nextRand();
+                heightField[y * size + x] = streak * 0.62 + brushWave * 0.26 + microGrain * 0.12;
+              }
+            }
+
+            const roughnessCanvas = document.createElement('canvas');
+            roughnessCanvas.width = size;
+            roughnessCanvas.height = size;
+            const rCtx = roughnessCanvas.getContext('2d');
+            const rImg = rCtx.createImageData(size, size);
+
+            const normalCanvas = document.createElement('canvas');
+            normalCanvas.width = size;
+            normalCanvas.height = size;
+            const nCtx = normalCanvas.getContext('2d');
+            const nImg = nCtx.createImageData(size, size);
+
+            const normalStrength = 2.4;
+            for (let y = 0; y < size; y++) {
+              const ym = (y - 1 + size) % size;
+              const yp = (y + 1) % size;
+              for (let x = 0; x < size; x++) {
+                const xm = (x - 1 + size) % size;
+                const xp = (x + 1) % size;
+                const idx = y * size + x;
+                const p = idx * 4;
+
+                const h = heightField[idx];
+                const roughByte = Math.max(0, Math.min(255, Math.round(140 + h * 95)));
+                rImg.data[p] = roughByte;
+                rImg.data[p + 1] = roughByte;
+                rImg.data[p + 2] = roughByte;
+                rImg.data[p + 3] = 255;
+
+                // Gradiente Sobel periódico para normal map en espacio tangente
+                const tl = heightField[ym * size + xm];
+                const t = heightField[ym * size + x];
+                const tr = heightField[ym * size + xp];
+                const l = heightField[y * size + xm];
+                const r = heightField[y * size + xp];
+                const bl = heightField[yp * size + xm];
+                const b = heightField[yp * size + x];
+                const br = heightField[yp * size + xp];
+
+                const dx = (tr + 2 * r + br - (tl + 2 * l + bl)) * normalStrength;
+                const dy = (bl + 2 * b + br - (tl + 2 * t + tr)) * normalStrength;
+                let nx = -dx;
+                let ny = -dy;
+                let nz = 1.0;
+                const len = Math.hypot(nx, ny, nz) || 1;
+                nx /= len;
+                ny /= len;
+                nz /= len;
+
+                nImg.data[p] = Math.round((nx * 0.5 + 0.5) * 255);
+                nImg.data[p + 1] = Math.round((ny * 0.5 + 0.5) * 255);
+                nImg.data[p + 2] = Math.round((nz * 0.5 + 0.5) * 255);
+                nImg.data[p + 3] = 255;
+              }
+            }
+
+            rCtx.putImageData(rImg, 0, 0);
+            nCtx.putImageData(nImg, 0, 0);
+
+            const maxAnisotropy =
+              webGLRenderer && webGLRenderer.capabilities
+                ? Math.min(8, webGLRenderer.capabilities.getMaxAnisotropy())
+                : 1;
+
+            const configureMap = (tex) => {
+              tex.wrapS = THREE.RepeatWrapping;
+              tex.wrapT = THREE.RepeatWrapping;
+              // ExtrudeGeometry usa coordenadas en milímetros; 0.08 repite el grano cada ~12.5 mm
+              tex.repeat.set(0.08, 0.08);
+              tex.anisotropy = maxAnisotropy;
+              tex.needsUpdate = true;
+              return tex;
+            };
+
+            const roughnessMap = configureMap(new THREE.CanvasTexture(roughnessCanvas));
+            const normalMap = configureMap(new THREE.CanvasTexture(normalCanvas));
+
+            return { roughnessMap, normalMap };
+          } catch (_) {
+            return null;
+          }
+        }
+
+        function resizeThreeViewer() {
+          if (!renderer || !camera || !viewerContainer) return;
+          const width = Math.max(1, viewerContainer.clientWidth);
+          const height = Math.max(1, viewerContainer.clientHeight);
+          camera.aspect = width / height;
+          camera.updateProjectionMatrix();
+          renderer.setSize(width, height, false);
+          renderer.domElement.style.width = '100%';
+          renderer.domElement.style.height = '100%';
+        }
+
+        function initThreeScene() {
+          if (typeof THREE === 'undefined' || !viewerContainer) return false;
+          if (renderer) return true;
+
+          isSoftwareGl = detectSoftwareWebGL();
+
+          // 1. Escena con fondo oscuro 0x111827 (bg-gray-900)
+          scene = new THREE.Scene();
+          scene.background = new THREE.Color(0x111827);
+
+          const width = Math.max(1, viewerContainer.clientWidth);
+          const height = Math.max(1, viewerContainer.clientHeight);
+
+          // 2. Cámara de perspectiva
+          camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 2000);
+          camera.position.set(10, 8, 40);
+
+          // 3. Renderizador WebGL adjuntado a <div id="viewer-3d">
+          renderer = new THREE.WebGLRenderer({
+            antialias: !isSoftwareGl,
+            powerPreference: 'high-performance',
+            preserveDrawingBuffer: true,
+          });
+          renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio || 1, 2));
+          renderer.setSize(width, height, false);
+          renderer.outputEncoding = THREE.sRGBEncoding;
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          renderer.toneMappingExposure = 1.15;
+
+          renderer.domElement.style.display = 'block';
+          renderer.domElement.style.width = '100%';
+          renderer.domElement.style.height = '100%';
+          renderer.domElement.style.cursor = 'grab';
+          viewerContainer.appendChild(renderer.domElement);
+
+          // 4. OrbitControls con amortiguación suave, zoom y paneo
+          if (typeof THREE.OrbitControls === 'function') {
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.enableZoom = true;
+            controls.enablePan = true;
+            controls.target.set(0, 0, 0);
+            controls.addEventListener('start', () => {
+              isUserInteracting = true;
+            });
+            controls.addEventListener('end', () => {
+              isUserInteracting = false;
+              lastInteractionEndTime = performance.now();
+            });
+            controls.update();
+          }
+
+          // Entorno metálico procedural y mapas PBR (normalMap + roughnessMap) para acabado realista
+          studioEnvMap = buildStudioEnvMap(renderer);
+          if (studioEnvMap) {
+            scene.environment = studioEnvMap;
+          }
+          metalPbrMaps = buildBrushedMetalPBRMaps(renderer);
+
+          // 5. Iluminación: AmbientLight + DirectionalLight (+ luz de borde)
+          const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+          scene.add(ambientLight);
+
+          const keyLight = new THREE.DirectionalLight(0xfff5e4, 1.35);
+          keyLight.position.set(18, 26, 30);
+          scene.add(keyLight);
+
+          const rimLight = new THREE.DirectionalLight(0x67e8f9, 0.75);
+          rimLight.position.set(-22, -12, -18);
+          scene.add(rimLight);
+
+          // Seguridad ante pérdida de contexto WebGL
+          renderer.domElement.addEventListener('webglcontextlost', (e) => {
+            e.preventDefault();
+            if (animFrameId) {
+              cancelAnimationFrame(animFrameId);
+              animFrameId = null;
+            }
+          });
+          renderer.domElement.addEventListener('webglcontextrestored', () => {
+            animateThreeScene();
+          });
+
+          // Responsividad al tamaño del contenedor #viewer-3d
+          window.addEventListener('resize', resizeThreeViewer);
+          if (typeof ResizeObserver === 'function') {
+            const ro = new ResizeObserver(resizeThreeViewer);
+            ro.observe(viewerContainer);
+          }
+
+          animateThreeScene();
+          return true;
+        }
+
+        function generate3DModel(profilePoints) {
+          if (!Array.isArray(profilePoints) || profilePoints.length < 3) {
+            console.warn('generate3DModel: el perfil 2D no contiene suficientes puntos.');
+            return;
+          }
+
+          if (!initThreeScene()) {
+            console.error('Three.js no está disponible.');
+            return;
+          }
+
+          // Eliminar malla anterior de la escena y liberar recursos GPU
+          if (currentMesh) {
+            scene.remove(currentMesh);
+            if (currentMesh.geometry) currentMesh.geometry.dispose();
+            if (currentMesh.material) {
+              if (Array.isArray(currentMesh.material)) {
+                currentMesh.material.forEach((m) => m.dispose());
+              } else {
+                currentMesh.material.dispose();
+              }
+            }
+            currentMesh = null;
+          }
+
+          // Coordenadas calibradas en escala exacta 1:1 (1 unidad Three.js = 1 mm real)
+          const points = profilePoints;
+
+          // Instanciar THREE.Shape() y trazar el contorno 2D en milímetros
+          const shape = new THREE.Shape();
+          shape.moveTo(points[0].x, points[0].y);
+          const lastIdx =
+            points.length > 1 &&
+            points[points.length - 1].x === points[0].x &&
+            points[points.length - 1].y === points[0].y
+              ? points.length - 1
+              : points.length;
+          for (let i = 1; i < lastIdx; i++) {
+            shape.lineTo(points[i].x, points[i].y);
+          }
+          shape.closePath();
+
+          // Añadir agujero(s) para el llavero (poligonales de OpenCV o circular paramétrico)
+          const hasScannerHoles = Array.isArray(points.holes) && points.holes.length > 0;
+          if (hasScannerHoles) {
+            for (const holePts of points.holes) {
+              if (!Array.isArray(holePts) || holePts.length < 3) continue;
+              const holePath = new THREE.Path();
+              holePath.moveTo(holePts[0].x, holePts[0].y);
+              for (let i = 1; i < holePts.length; i++) {
+                holePath.lineTo(holePts[i].x, holePts[i].y);
+              }
+              holePath.closePath();
+              shape.holes.push(holePath);
+            }
+          }
+
+          let bowHole = points.bowHole || null;
+          if (!hasScannerHoles && !bowHole) {
+            let minX = Infinity;
+            let maxX = -Infinity;
+            let minY = Infinity;
+            let maxY = -Infinity;
+            for (const pt of points) {
+              if (pt.x < minX) minX = pt.x;
+              if (pt.x > maxX) maxX = pt.x;
+              if (pt.y < minY) minY = pt.y;
+              if (pt.y > maxY) maxY = pt.y;
+            }
+            if (minY <= -4 && maxY >= 12 && maxX - minX >= 35) {
+              bowHole = {
+                x: maxX - 13.5,
+                y: (minY + maxY) / 2,
+                radius: 3.0,
+              };
+            }
+          }
+
+          if (!hasScannerHoles && bowHole && bowHole.radius > 0) {
+            const holePath = new THREE.Path();
+            holePath.absarc(bowHole.x, bowHole.y, bowHole.radius, 0, Math.PI * 2, false);
+            shape.holes.push(holePath);
+          }
+
+          // Leer grosor real de extrusión desde el panel de calibración (Z-Depth en mm)
+          const thicknessInput = document.getElementById('input-thickness');
+          const parsedThickness = thicknessInput ? parseFloat(thicknessInput.value) : 2.2;
+          const thicknessMm =
+            Number.isFinite(parsedThickness) && parsedThickness > 0 ? parsedThickness : 2.2;
+
+          // Bisel desactivado para no alterar las tolerancias ni el bitting mecánico al exportar STL
+          const extrudeSettings = {
+            depth: thicknessMm,
+            bevelEnabled: false,
+            steps: 1,
+            curveSegments: 24,
+          };
+
+          let geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+
+          if (!metalPbrMaps && renderer) {
+            metalPbrMaps = buildBrushedMetalPBRMaps(renderer);
+          }
+
+          // Material metálico PBR con envMap, roughnessMap, normalMap y preset de Material de Impresión
+          const materialPreset = getSelectedPrintMaterialPreset();
+          const materialOptions = {
+            color: materialPreset.color,
+            metalness: materialPreset.metalness,
+            roughness: materialPreset.roughness,
+            envMap: studioEnvMap || scene.environment || null,
+            envMapIntensity: materialPreset.envMapIntensity,
+          };
+
+          if (metalPbrMaps) {
+            materialOptions.roughnessMap = metalPbrMaps.roughnessMap;
+            materialOptions.normalMap = metalPbrMaps.normalMap;
+            materialOptions.normalScale = new THREE.Vector2(
+              materialPreset.normalScale,
+              materialPreset.normalScale
+            );
+          }
+
+          const material = new THREE.MeshStandardMaterial(materialOptions);
+
+          // Fresado del surco lateral (warding) mediante CSG para llaves paramétricas
+          let bladeInfo = points.bladeInfo || null;
+          if (!bladeInfo && bowHole) {
+            let maxX = -Infinity;
+            for (const pt of points) {
+              if (pt.x > maxX) maxX = pt.x;
+            }
+            if (maxX > 35) {
+              bladeInfo = {
+                bladeLength: Math.max(18, maxX - 28.5),
+                rootDepth: 8.35,
+              };
+            }
+          }
+
+          if (bladeInfo && window.CSG && typeof window.CSG.subtract === 'function') {
+            let fresaGeometry = null;
+            let carvedResult = null;
+            try {
+              const meshLlave = new THREE.Mesh(geometry, material);
+              const bladeLen = bladeInfo.bladeLength;
+              const rootDepth = bladeInfo.rootDepth;
+
+              // Prisma "fresa" que recorre toda la hoja (punta -> hombro) restando 0.8 mm en el lateral frontal
+              const grooveLength = Math.max(8, bladeLen + 0.5);
+              const grooveHeight = Math.min(2.0, Math.max(1.2, rootDepth * 0.24));
+              const grooveCutDepth = Math.min(0.8, thicknessMm * 0.38);
+              const cutterDepth = grooveCutDepth + 1.2;
+
+              fresaGeometry = new THREE.BoxGeometry(grooveLength, grooveHeight, cutterDepth);
+              const meshFresa = new THREE.Mesh(fresaGeometry, material);
+
+              meshFresa.position.set(
+                (bladeLen - 1.5) / 2,
+                rootDepth * 0.34,
+                thicknessMm - grooveCutDepth + cutterDepth / 2
+              );
+
+              meshLlave.updateMatrix();
+              meshFresa.updateMatrix();
+
+              carvedResult = window.CSG.subtract(meshLlave, meshFresa);
+
+              if (carvedResult && carvedResult.geometry) {
+                const carvedGeometry = new THREE.BufferGeometry();
+                const posAttr = carvedResult.geometry.getAttribute('position');
+                const normAttr = carvedResult.geometry.getAttribute('normal');
+                const uvAttr = carvedResult.geometry.getAttribute('uv');
+
+                if (posAttr) {
+                  carvedGeometry.setAttribute(
+                    'position',
+                    new THREE.BufferAttribute(new Float32Array(posAttr.array), 3)
+                  );
+                }
+                if (normAttr) {
+                  carvedGeometry.setAttribute(
+                    'normal',
+                    new THREE.BufferAttribute(new Float32Array(normAttr.array), 3)
+                  );
+                } else {
+                  carvedGeometry.computeVertexNormals();
+                }
+                if (uvAttr) {
+                  carvedGeometry.setAttribute(
+                    'uv',
+                    new THREE.BufferAttribute(new Float32Array(uvAttr.array), 2)
+                  );
+                }
+                if (carvedResult.geometry.index) {
+                  carvedGeometry.setIndex(
+                    new THREE.BufferAttribute(
+                      new Uint32Array(carvedResult.geometry.index.array),
+                      1
+                    )
+                  );
+                }
+
+                geometry.dispose();
+                geometry = carvedGeometry;
+              }
+            } catch (csgErr) {
+              console.warn('No se pudo tallar el surco lateral con CSG:', csgErr);
+            } finally {
+              if (fresaGeometry) fresaGeometry.dispose();
+              if (carvedResult && carvedResult.geometry) carvedResult.geometry.dispose();
+            }
+          }
+
+          // Centrar la geometría resultante en el origen (0, 0, 0)
+          geometry.center();
+          geometry.computeBoundingBox();
+
+          currentMesh = new THREE.Mesh(geometry, material);
+          scene.add(currentMesh);
+
+          // Ajustar cámara y OrbitControls automáticamente para encuadrar el modelo completo
+          const size = new THREE.Vector3();
+          geometry.boundingBox.getSize(size);
+          const maxDim = Math.max(size.x, size.y, size.z);
+          const fovRad = (camera.fov * Math.PI) / 180;
+          const fitHeightDist = maxDim / (2 * Math.tan(fovRad / 2));
+          const fitWidthDist = fitHeightDist / Math.max(0.5, camera.aspect);
+          const cameraDistance = Math.max(fitHeightDist, fitWidthDist) * 1.35;
+
+          camera.position.set(cameraDistance * 0.36, -cameraDistance * 0.32, cameraDistance * 0.92);
+          camera.near = Math.max(0.05, cameraDistance * 0.01);
+          camera.far = Math.max(500, cameraDistance * 20);
+          camera.updateProjectionMatrix();
+
+          lastFittedCameraState = {
+            position: camera.position.clone(),
+            target: new THREE.Vector3(0, 0, 0),
+          };
+
+          if (controls) {
+            controls.target.set(0, 0, 0);
+            controls.minDistance = Math.max(2, maxDim * 0.35);
+            controls.maxDistance = Math.max(150, maxDim * 6);
+            controls.update();
+          } else {
+            camera.lookAt(0, 0, 0);
+          }
+
+          // Ocultar placeholder, mostrar HUD y habilitar botón de descarga STL
+          if (viewerPlaceholder) viewerPlaceholder.classList.add('hidden');
+          if (viewerHud) viewerHud.classList.remove('hidden');
+          if (viewerMeshStats) {
+            viewerMeshStats.textContent =
+              `Malla 3D (1:1 mm): ${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)} mm`;
+          }
+          if (btnDownloadStl) {
+            btnDownloadStl.disabled = false;
+          }
+          if (btnCaptureScreenshot) {
+            btnCaptureScreenshot.disabled = false;
+          }
+          if (btnResetCamera) {
+            btnResetCamera.disabled = false;
+          }
+        }
+
+        // Exportación de la malla 3D generada a archivo STL listo para impresión 3D
+        function exportToSTL() {
+          if (!currentMesh || typeof THREE.STLExporter !== 'function') {
+            console.warn('No hay ninguna malla 3D generada o STLExporter no está disponible.');
+            return;
+          }
+
+          const exporter = new THREE.STLExporter();
+          // Restablecer temporalmente la rotación de exhibición para exportar el STL alineado a los ejes X/Y
+          const prevRotationZ = currentMesh.rotation.z;
+          currentMesh.rotation.z = 0;
+          currentMesh.updateMatrixWorld(true);
+          const stlString = exporter.parse(currentMesh);
+          currentMesh.rotation.z = prevRotationZ;
+          currentMesh.updateMatrixWorld(true);
+          const blob = new Blob([stlString], { type: 'text/plain' });
+          const url = URL.createObjectURL(blob);
+
+          const link = document.createElement('a');
+          link.style.display = 'none';
+          link.href = url;
+          link.download = window.__activeKeyFilenameBase
+            ? `llave_${window.__activeKeyFilenameBase}.stl`
+            : 'llave_keyforge.stl';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          setTimeout(() => {
+            URL.revokeObjectURL(url);
+          }, 150);
+        }
+
+        function resetCameraView() {
+          if (!camera || !lastFittedCameraState) return;
+          if (currentMesh) {
+            currentMesh.rotation.z = 0;
+          }
+          camera.position.copy(lastFittedCameraState.position);
+          if (controls) {
+            controls.target.copy(lastFittedCameraState.target);
+            controls.update();
+          } else {
+            camera.lookAt(lastFittedCameraState.target);
+          }
+        }
+
+        if (btnResetCamera) {
+          btnResetCamera.addEventListener('click', resetCameraView);
+        }
+
+        function setShowcaseRotation(enabled) {
+          showcaseRotateEnabled = Boolean(enabled);
+          if (!btnShowcaseRotate) return;
+          btnShowcaseRotate.setAttribute('aria-pressed', String(showcaseRotateEnabled));
+          if (showcaseRotateEnabled) {
+            btnShowcaseRotate.classList.remove('bg-gray-900', 'border-gray-700', 'text-gray-300');
+            btnShowcaseRotate.classList.add('bg-cyan-500/15', 'border-cyan-400', 'text-cyan-300');
+            if (showcaseRotateLabel) showcaseRotateLabel.textContent = 'Exhibición Z: ON';
+          } else {
+            btnShowcaseRotate.classList.remove('bg-cyan-500/15', 'border-cyan-400', 'text-cyan-300');
+            btnShowcaseRotate.classList.add('bg-gray-900', 'border-gray-700', 'text-gray-300');
+            if (showcaseRotateLabel) showcaseRotateLabel.textContent = 'Exhibición Z: OFF';
+          }
+        }
+
+        if (btnShowcaseRotate) {
+          btnShowcaseRotate.addEventListener('click', () => {
+            setShowcaseRotation(!showcaseRotateEnabled);
+          });
+        }
+
+        function captureScreenshot() {
+          if (!renderer || !scene || !camera || !currentMesh) {
+            console.warn('No hay ninguna escena o malla 3D renderizada para capturar.');
+            return;
+          }
+
+          // Forzar un render síncrono justo antes de leer el buffer para garantizar el frame actual
+          renderer.render(scene, camera);
+          const dataUrl = renderer.domElement.toDataURL('image/png');
+
+          const link = document.createElement('a');
+          link.style.display = 'none';
+          link.href = dataUrl;
+          link.download = window.__activeKeyFilenameBase
+            ? `captura_${window.__activeKeyFilenameBase}.png`
+            : 'captura_keyforge.png';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+
+        if (btnDownloadStl) {
+          btnDownloadStl.addEventListener('click', exportToSTL);
+        }
+
+        if (btnCaptureScreenshot) {
+          btnCaptureScreenshot.addEventListener('click', captureScreenshot);
+        }
+
+        if (selectPrintMaterial) {
+          selectPrintMaterial.addEventListener('change', () => {
+            if (currentMesh) {
+              applyPrintMaterialToMesh(currentMesh);
+            }
+          });
+        }
+
+        function animateThreeScene(now) {
+          animFrameId = requestAnimationFrame(animateThreeScene);
+          const currentTime = typeof now === 'number' ? now : performance.now();
+          const dt = Math.min(0.05, Math.max(0, (currentTime - lastFrameTime) / 1000));
+          lastFrameTime = currentTime;
+
+          if (!renderer || !scene || !camera) return;
+
+          if (
+            showcaseRotateEnabled &&
+            !isUserInteracting &&
+            currentMesh &&
+            currentTime - lastInteractionEndTime > 1200
+          ) {
+            currentMesh.rotation.z += dt * 0.45;
+          }
+
+          if (controls) {
+            controls.update();
+          }
+
+          renderer.render(scene, camera);
+        }
+
+        // Exponer funciones al ámbito global para integración entre módulos
+        window.generate3DModel = generate3DModel;
+        window.exportToSTL = exportToSTL;
+        window.captureScreenshot = captureScreenshot;
+        window.setShowcaseRotation = setShowcaseRotation;
+
+        // Inicializar escena al cargar la página
+        initThreeScene();
+      })();
+    </script>
+    <!-- [FIN MOTOR THREE.JS] -->
+  </body>
+</html>

@@ -1,6 +1,0 @@
-{
-  "name": "KeyForge Web",
-  "description": "Generador paramétrico y por visión por computador de modelos 3D de llaves en el navegador.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

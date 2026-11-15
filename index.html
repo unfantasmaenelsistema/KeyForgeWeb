@@ -15,7 +15,7 @@
     />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
-    <link rel="icon" type="image/png" href="./assets/aistudio/icono_81a3db5b.png" />
+    <link rel="icon" type="image/png" href="./assets/logo.png" />
 
     <!-- Tipografía técnica limpia (Display + Cuerpo + Monoespaciada) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -25,23 +25,6 @@
       rel="stylesheet"
     />
 
-    <!-- [1. SECCIÓN UI / TAILWIND CSS] -->
-    <!-- Tailwind CSS vía CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
-              display: ['"Outfit"', 'system-ui', 'sans-serif'],
-              mono: ['"JetBrains Mono"', 'monospace'],
-            },
-          },
-        },
-      };
-    </script>
 
     <style>
       .viewer-grid {
@@ -61,6 +44,9 @@
         }
       }
     </style>
+
+    <!-- Tailwind CSS compilado en el build (antes: CDN de desarrollo, que avisa de no usarse en producción) -->
+    <link rel="stylesheet" href="/src/styles.css" />
 
     <!-- [INICIO LÓGICA OPENCV.JS - Configuración y carga asíncrona] -->
     <script>
@@ -106,7 +92,7 @@
     </script>
     <script
       async
-      src="https://docs.opencv.org/4.x/opencv.js"
+      src="https://docs.opencv.org/4.9.0/opencv.js"
       onload="onOpenCvScriptLoad()"
       onerror="onOpenCvScriptError()"
     ></script>
@@ -121,6 +107,8 @@
       window.CSG = CSG;
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+    <!-- Aísla la hoja de una llave y construye su contorno imprimible (public/keyblade.js) -->
+    <script src="./keyblade.js"></script>
   </head>
 
   <body class="min-h-screen bg-gray-900 text-gray-200 font-sans antialiased selection:bg-cyan-500/30 selection:text-cyan-200">
@@ -137,7 +125,7 @@
               class="shrink-0 block rounded-xl bg-white/95 p-1.5 ring-1 ring-gray-700 hover:ring-cyan-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
             >
               <img
-                src="./assets/aistudio/icono_81a3db5b.png"
+                src="./assets/logo.png"
                 alt="Logo de Un Fantasma en el Sistema"
                 class="w-11 h-11 sm:w-12 sm:h-12 object-contain block"
                 referrerpolicy="no-referrer"
@@ -231,7 +219,7 @@
                   Escáner óptico de llave
                 </h2>
                 <p class="text-sm text-gray-400">
-                  Carga una fotografía cenital de la llave sobre fondo claro contrastado para extraer su silueta 2D.
+                  Carga una foto de la llave (o del llavero entero) sobre fondo claro y liso: se aísla una hoja, se mide su dentado y se genera la llave lista para imprimir.
                 </p>
               </div>
 
@@ -388,13 +376,30 @@
                   <img
                     id="img-preview"
                     alt="Previsualización de la llave cargada"
-                    class="hidden max-h-60 w-auto max-w-full object-contain rounded-lg"
+                    class="hidden max-h-80 w-auto max-w-full object-contain rounded-lg"
                   />
                   <!-- Canvas para renderizar el contorno poligonal detectado por OpenCV -->
                   <canvas
                     id="cvs-processing"
-                    class="hidden max-h-60 w-auto max-w-full object-contain rounded-lg"
+                    class="hidden max-h-80 w-auto max-w-full object-contain rounded-lg cursor-crosshair"
                   ></canvas>
+                </div>
+
+                <!-- Selector de llave (modo «Una llave»): candidatas detectadas y marcado manual -->
+                <div id="blade-picker" class="hidden space-y-2 pb-3">
+                  <p id="blade-picker-hint" class="text-xs text-gray-400 leading-relaxed">
+                    Hojas detectadas: elige la llave que quieres reproducir.
+                  </p>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <div id="blade-candidates" class="flex flex-wrap items-center gap-1.5"></div>
+                    <button
+                      type="button"
+                      id="btn-manual-blade"
+                      class="px-2.5 py-1 text-xs font-medium rounded-md border border-gray-600 bg-gray-900 text-gray-200 hover:border-cyan-400 hover:text-cyan-300 transition-colors whitespace-nowrap"
+                    >
+                      Marcar a mano (punta → hombro)
+                    </button>
+                  </div>
                 </div>
 
                 <div class="space-y-3">
@@ -410,7 +415,7 @@
                       id="btn-process-silhouette"
                       class="px-4 py-2 text-sm font-semibold rounded-lg bg-cyan-500 hover:bg-cyan-400 text-gray-950 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
                     >
-                      Procesar Silueta
+                      Procesar foto
                     </button>
                   </div>
 
@@ -436,7 +441,7 @@
                     Calibración de Escala (Impresión 3D)
                   </h3>
                   <p class="text-xs text-gray-400">
-                    Convierte los píxeles del contorno a milímetros reales (1 unidad 3D = 1 mm en el archivo STL).
+                    Convierte los píxeles a milímetros reales (1 unidad 3D = 1 mm en el STL). Mide la llave con una regla o un calibre: la foto no sabe a qué distancia se hizo.
                   </p>
                 </div>
                 <span id="calibration-scale-info" class="text-xs font-mono text-cyan-400 tabular-nums">
@@ -446,27 +451,54 @@
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div class="space-y-1.5">
+                  <label for="select-scan-mode" class="block text-xs font-medium text-gray-300">
+                    Qué se genera
+                  </label>
+                  <select
+                    id="select-scan-mode"
+                    class="w-full h-10 px-3 rounded-lg bg-gray-900 border border-gray-600 text-gray-100 text-sm focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/40"
+                  >
+                    <option value="key" selected>Una llave: hoja medida + cabeza estándar (recomendado)</option>
+                    <option value="silhouette">Silueta completa (una sola llave, foto desde arriba)</option>
+                  </select>
+                </div>
+                <div class="space-y-1.5">
+                  <label for="select-ref-type" class="block text-xs font-medium text-gray-300">
+                    Medida que conoces de la llave
+                  </label>
+                  <select
+                    id="select-ref-type"
+                    class="w-full h-10 px-3 rounded-lg bg-gray-900 border border-gray-600 text-gray-100 text-sm focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/40"
+                  >
+                    <option value="height" selected>Altura de la hoja (lomo → dentado más alto)</option>
+                    <option value="length">Longitud de la hoja (hombro → punta)</option>
+                    <option value="total">Largo total de la llave</option>
+                  </select>
+                </div>
+                <div class="space-y-1.5">
                   <div class="flex flex-wrap items-center justify-between gap-2">
                     <label
                       for="input-real-width"
                       class="block text-xs font-medium text-gray-300"
                     >
-                      Ancho real de referencia (mm)
+                      Medida real (mm)
                     </label>
                     <div class="flex items-center gap-1.5">
                       <button
                         type="button"
                         data-cal-preset="8.5"
+                        data-cal-type="height"
                         class="cal-preset-btn px-2 py-0.5 text-[11px] font-mono rounded bg-gray-800 border border-gray-700 text-gray-300 hover:border-cyan-400 hover:text-cyan-300 transition-colors"
                       >
-                        8.5 mm (hoja)
+                        8.5 mm (altura hoja)
                       </button>
                       <button
                         type="button"
                         data-cal-preset="55.0"
+                        data-cal-type="total"
                         class="cal-preset-btn px-2 py-0.5 text-[11px] font-mono rounded bg-gray-800 border border-gray-700 text-gray-300 hover:border-cyan-400 hover:text-cyan-300 transition-colors"
                       >
-                        55 mm (llave)
+                        55 mm (largo total)
                       </button>
                     </div>
                   </div>
@@ -1042,11 +1074,37 @@
         }
 
         function scalePixelProfileToMillimeters(pixelPoints) {
+          // Eje largo de la silueta por PCA: la llave queda horizontal aunque la foto esté girada
+          let mx = 0;
+          let my = 0;
+          for (const pt of pixelPoints) {
+            mx += pt.x;
+            my += pt.y;
+          }
+          mx /= pixelPoints.length;
+          my /= pixelPoints.length;
+          let sxx = 0;
+          let syy = 0;
+          let sxy = 0;
+          for (const pt of pixelPoints) {
+            sxx += (pt.x - mx) ** 2;
+            syy += (pt.y - my) ** 2;
+            sxy += (pt.x - mx) * (pt.y - my);
+          }
+          const angle = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+          const cos = Math.cos(-angle);
+          const sin = Math.sin(-angle);
+          const rotate = (pt) => ({
+            x: (pt.x - mx) * cos - (pt.y - my) * sin,
+            y: (pt.x - mx) * sin + (pt.y - my) * cos,
+          });
+
+          const rotated = pixelPoints.map(rotate);
           let minX = Infinity;
           let maxX = -Infinity;
           let minY = Infinity;
           let maxY = -Infinity;
-          for (const pt of pixelPoints) {
+          for (const pt of rotated) {
             if (pt.x < minX) minX = pt.x;
             if (pt.x > maxX) maxX = pt.x;
             if (pt.y < minY) minY = pt.y;
@@ -1063,9 +1121,9 @@
             y: Math.round((maxY - pt.y) * scaleFactor * 10000) / 10000,
           });
 
-          const scaledPoints = pixelPoints.map(mapPoint);
+          const scaledPoints = rotated.map(mapPoint);
           if (Array.isArray(pixelPoints.holes) && pixelPoints.holes.length > 0) {
-            scaledPoints.holes = pixelPoints.holes.map((holePts) => holePts.map(mapPoint));
+            scaledPoints.holes = pixelPoints.holes.map((holePts) => holePts.map(rotate).map(mapPoint));
           }
 
           return { scaledPoints, pixelWidth, realWidthMm, scaleFactor };
@@ -1106,6 +1164,47 @@
           setOpenCvReadyState();
         }
 
+        // Estado del modo «Una llave»: máscara binaria, hojas candidatas y selección actual
+        const scanModeSelect = document.getElementById('select-scan-mode');
+        const refTypeSelect = document.getElementById('select-ref-type');
+        const bladePicker = document.getElementById('blade-picker');
+        const bladePickerHint = document.getElementById('blade-picker-hint');
+        const bladeCandidatesEl = document.getElementById('blade-candidates');
+        const btnManualBlade = document.getElementById('btn-manual-blade');
+        let bladeScan = null; // { mask, w, h, base, candidates, selected, manual, picking }
+
+        function getScanMode() {
+          return scanModeSelect ? scanModeSelect.value : 'key';
+        }
+
+        function getReference() {
+          return { type: refTypeSelect ? refTypeSelect.value : 'height', mm: getCalibratedRealWidthMm() };
+        }
+
+        // Las fotos de móvil son enormes: se procesan a 1200 px de lado como máximo
+        function getWorkingCanvas() {
+          const maxSide = 1200;
+          const k = Math.min(1, maxSide / Math.max(imgPreview.naturalWidth, imgPreview.naturalHeight));
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(imgPreview.naturalWidth * k));
+          c.height = Math.max(1, Math.round(imgPreview.naturalHeight * k));
+          const ctx = c.getContext('2d');
+          ctx.fillStyle = '#ffffff'; // fondo blanco bajo los PNG con transparencia
+          ctx.fillRect(0, 0, c.width, c.height);
+          ctx.drawImage(imgPreview, 0, 0, c.width, c.height);
+          return c;
+        }
+
+        function showProcessedCanvas(title) {
+          hasProcessedResult = true;
+          showingProcessedCanvas = true;
+          imgPreview.classList.add('hidden');
+          cvsProcessing.classList.remove('hidden');
+          btnToggleOriginal.classList.remove('hidden');
+          btnToggleOriginal.textContent = 'Ver original';
+          previewTitle.textContent = title;
+        }
+
         function processKeySilhouette() {
           if (!isOpenCvReady) {
             showScannerError('El motor OpenCV aún se está inicializando.');
@@ -1118,26 +1217,16 @@
 
           clearScannerError();
 
-          const wasImgHidden = imgPreview.classList.contains('hidden');
-          if (wasImgHidden) {
-            imgPreview.classList.remove('hidden');
-          }
-
           let src = null;
           let gray = null;
           let blurred = null;
           let binary = null;
           let morph = null;
           let kernel = null;
-          let contours = null;
-          let hierarchy = null;
-          let largestContour = null;
-          let approxPoly = null;
-          let approxVector = null;
-          let dst = null;
 
           try {
-            src = cv.imread(imgPreview);
+            const working = getWorkingCanvas();
+            src = cv.imread(working);
 
             gray = new cv.Mat();
             cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
@@ -1149,24 +1238,68 @@
             cv.threshold(blurred, binary, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
 
             morph = new cv.Mat();
-            kernel = cv.Mat.ones(3, 3, cv.CV_8U);
+            kernel = cv.Mat.ones(5, 5, cv.CV_8U);
             cv.morphologyEx(binary, morph, cv.MORPH_CLOSE, kernel);
 
-            contours = new cv.MatVector();
-            hierarchy = new cv.Mat();
-            cv.findContours(morph, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
-
-            if (contours.size() === 0) {
-              showScannerError('No se detectó ningún contorno. Usa una foto con mayor contraste sobre fondo claro.');
-              if (wasImgHidden) imgPreview.classList.add('hidden');
+            // Máscara 0/1 con los brillos del metal rellenos (pero no el interior de la anilla)
+            const w = morph.cols;
+            const h = morph.rows;
+            let mask = new Uint8Array(w * h);
+            let fg = 0;
+            for (let i = 0; i < w * h; i++) {
+              mask[i] = morph.data[i] > 127 ? 1 : 0;
+              fg += mask[i];
+            }
+            if (fg < 100) {
+              showScannerError('No se detectó ninguna llave. Usa una foto con la llave sobre fondo claro y liso.');
               return;
             }
+            mask = window.KeyBlade.fillSmallHoles(mask, w, h, Math.round(fg * 0.08));
 
+            if (getScanMode() === 'key') {
+              const candidates = window.KeyBlade.autoDetect(mask, w, h);
+              bladeScan = { mask, w, h, base: working, candidates, selected: 0, manual: null, picking: 0 };
+              renderBladeCandidates();
+              if (candidates.length === 0) {
+                drawBladeOverlay();
+                showProcessedCanvas('Marca la hoja a mano');
+                startManualBlade();
+                showScannerError('No se ha encontrado ninguna hoja automáticamente: márcala a mano con dos clics (punta y hombro).');
+                return;
+              }
+              applyBladeSelection();
+            } else {
+              bladeScan = null;
+              bladePicker.classList.add('hidden');
+              processFullSilhouette(src, morph);
+            }
+          } catch (err) {
+            console.error('Error en el procesamiento OpenCV:', err);
+            showScannerError('Ocurrió un error al procesar la imagen con OpenCV.');
+          } finally {
+            if (src) src.delete();
+            if (gray) gray.delete();
+            if (blurred) blurred.delete();
+            if (binary) binary.delete();
+            if (morph) morph.delete();
+            if (kernel) kernel.delete();
+          }
+        }
+
+        /** Modo «Silueta completa»: extruye el contorno exterior más grande y sus agujeros. */
+        function processFullSilhouette(src, morph) {
+          const contours = new cv.MatVector();
+          const hierarchy = new cv.Mat();
+          let approxPoly = null;
+          let approxVector = null;
+          let dst = null;
+          const holeDrawVector = new cv.MatVector();
+          try {
+            cv.findContours(morph, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
             let maxArea = -1;
             let maxContourIdx = -1;
             for (let i = 0; i < contours.size(); i++) {
-              const parentIdx = hierarchy.intPtr(0, i)[3];
-              if (parentIdx !== -1) continue;
+              if (hierarchy.intPtr(0, i)[3] !== -1) continue;
               const cnt = contours.get(i);
               const area = cv.contourArea(cnt, false);
               if (area > maxArea) {
@@ -1175,44 +1308,32 @@
               }
               cnt.delete();
             }
-
             if (maxContourIdx === -1 || maxArea <= 50) {
               showScannerError('El contorno detectado es demasiado pequeño para representar una llave.');
-              if (wasImgHidden) imgPreview.classList.add('hidden');
               return;
             }
 
-            largestContour = contours.get(maxContourIdx);
-
+            const largest = contours.get(maxContourIdx);
             approxPoly = new cv.Mat();
-            const perimeter = cv.arcLength(largestContour, true);
-            const epsilon = 0.002 * perimeter;
-            cv.approxPolyDP(largestContour, approxPoly, epsilon, true);
-
+            cv.approxPolyDP(largest, approxPoly, 0.002 * cv.arcLength(largest, true), true);
+            largest.delete();
             const extractedPoints = [];
-            const data = approxPoly.data32S;
-            for (let i = 0; i < data.length; i += 2) {
-              extractedPoints.push({ x: data[i], y: data[i + 1] });
+            for (let i = 0; i < approxPoly.data32S.length; i += 2) {
+              extractedPoints.push({ x: approxPoly.data32S[i], y: approxPoly.data32S[i + 1] });
             }
 
-            // Extraer agujeros interiores (como el orificio del llavero) hijos del contorno principal
             const detectedHoles = [];
-            const holeDrawVector = new cv.MatVector();
             for (let i = 0; i < contours.size(); i++) {
-              const parentIdx = hierarchy.intPtr(0, i)[3];
-              if (parentIdx !== maxContourIdx) continue;
+              if (hierarchy.intPtr(0, i)[3] !== maxContourIdx) continue;
               const holeCnt = contours.get(i);
               const holeArea = cv.contourArea(holeCnt, false);
               if (holeArea >= maxArea * 0.005 && holeArea <= maxArea * 0.35) {
                 const approxHole = new cv.Mat();
-                const holePerim = cv.arcLength(holeCnt, true);
-                cv.approxPolyDP(holeCnt, approxHole, 0.005 * holePerim, true);
+                cv.approxPolyDP(holeCnt, approxHole, 0.005 * cv.arcLength(holeCnt, true), true);
                 const hData = approxHole.data32S;
                 if (hData.length >= 6) {
                   const holePts = [];
-                  for (let j = 0; j < hData.length; j += 2) {
-                    holePts.push({ x: hData[j], y: hData[j + 1] });
-                  }
+                  for (let j = 0; j < hData.length; j += 2) holePts.push({ x: hData[j], y: hData[j + 1] });
                   detectedHoles.push(holePts);
                   holeDrawVector.push_back(approxHole);
                 }
@@ -1220,77 +1341,221 @@
               }
               holeCnt.delete();
             }
-            if (detectedHoles.length > 0) {
-              extractedPoints.holes = detectedHoles;
-            }
+            if (detectedHoles.length > 0) extractedPoints.holes = detectedHoles;
 
             lastRawPixelProfile = extractedPoints;
-            window.extractedProfile2D = extractedPoints;
-
-            // Conversión Píxel -> Milímetro (Fase 7)
-            const { scaledPoints, pixelWidth, realWidthMm, scaleFactor } =
-              scalePixelProfileToMillimeters(window.extractedProfile2D);
-            window.extractedProfile2D = scaledPoints;
             lastProfileSource = 'scanner';
-            window.__activeKeyFilenameBase = 'escaner';
+            window.__activeKeyFilenameBase = 'silueta';
 
             dst = src.clone();
             approxVector = new cv.MatVector();
             approxVector.push_back(approxPoly);
-
-            const neonGreen = new cv.Scalar(16, 255, 136, 255);
-            const cyanHole = new cv.Scalar(34, 211, 238, 255);
             const lineThickness = Math.max(2, Math.round(Math.min(src.cols, src.rows) * 0.006));
-            cv.drawContours(dst, approxVector, 0, neonGreen, lineThickness, cv.LINE_AA);
-            for (let h = 0; h < holeDrawVector.size(); h++) {
-              cv.drawContours(dst, holeDrawVector, h, cyanHole, lineThickness, cv.LINE_AA);
+            cv.drawContours(dst, approxVector, 0, new cv.Scalar(16, 255, 136, 255), lineThickness, cv.LINE_AA);
+            for (let hIdx = 0; hIdx < holeDrawVector.size(); hIdx++) {
+              cv.drawContours(dst, holeDrawVector, hIdx, new cv.Scalar(34, 211, 238, 255), lineThickness, cv.LINE_AA);
             }
-            holeDrawVector.delete();
-
             cv.imshow('cvs-processing', dst);
-
-            hasProcessedResult = true;
-            showingProcessedCanvas = true;
-            imgPreview.classList.add('hidden');
-            cvsProcessing.classList.remove('hidden');
-            btnToggleOriginal.classList.remove('hidden');
-            btnToggleOriginal.textContent = 'Ver original';
-            previewTitle.textContent = 'Silueta poligonal detectada (OpenCV)';
-
-            if (calibrationScaleInfo) {
-              calibrationScaleInfo.textContent =
-                `Escala: ${scaleFactor.toFixed(4)} mm/px (${Math.round(pixelWidth)} px → ${realWidthMm.toFixed(1)} mm)`;
-            }
-
-            visionResultInfo.textContent =
-              `Silueta calibrada: ${scaledPoints.length} vértices · ancho ${realWidthMm.toFixed(1)} mm`;
-            visionResultInfo.classList.remove('text-gray-400');
-            visionResultInfo.classList.add('text-emerald-400');
-            viewerSubstatus.textContent =
-              `Perfil 2D calibrado a ${realWidthMm.toFixed(1)} mm reales (${scaledPoints.length} vértices).`;
-
-            // Integración Fase 4 + 7: extruir automáticamente el perfil en milímetros reales
-            if (typeof window.generate3DModel === 'function') {
-              window.generate3DModel(window.extractedProfile2D);
-            }
-          } catch (err) {
-            console.error('Error en el procesamiento OpenCV:', err);
-            showScannerError('Ocurrió un error al procesar la silueta con OpenCV.');
-            if (wasImgHidden) imgPreview.classList.add('hidden');
+            showProcessedCanvas('Silueta completa detectada (OpenCV)');
+            recalibrateActiveScannerModel();
           } finally {
-            if (src) src.delete();
-            if (gray) gray.delete();
-            if (blurred) blurred.delete();
-            if (binary) binary.delete();
-            if (morph) morph.delete();
-            if (kernel) kernel.delete();
-            if (contours) contours.delete();
-            if (hierarchy) hierarchy.delete();
-            if (largestContour) largestContour.delete();
+            contours.delete();
+            hierarchy.delete();
+            holeDrawVector.delete();
             if (approxPoly) approxPoly.delete();
             if (approxVector) approxVector.delete();
             if (dst) dst.delete();
           }
+        }
+
+        /** Botones «Llave 1, 2, 3…» con las hojas detectadas. */
+        function renderBladeCandidates() {
+          if (!bladeScan) return;
+          bladePicker.classList.remove('hidden');
+          bladeCandidatesEl.innerHTML = '';
+          bladeScan.candidates.forEach((cand, i) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.dataset.bladeIndex = String(i);
+            const active = !bladeScan.manual && bladeScan.selected === i;
+            btn.className = active
+              ? 'px-2.5 py-1 text-xs font-semibold rounded-md bg-emerald-500 text-gray-950'
+              : 'px-2.5 py-1 text-xs font-medium rounded-md border border-gray-600 bg-gray-900 text-gray-200 hover:border-emerald-400';
+            btn.textContent = `Llave ${i + 1}`;
+            btn.addEventListener('click', () => {
+              bladeScan.selected = i;
+              bladeScan.manual = null;
+              bladeScan.picking = 0;
+              renderBladeCandidates();
+              applyBladeSelection();
+            });
+            bladeCandidatesEl.appendChild(btn);
+          });
+          bladePickerHint.textContent = bladeScan.picking
+            ? bladeScan.picking === 1
+              ? 'Marcado manual: haz clic en la PUNTA de la hoja.'
+              : 'Ahora haz clic en el HOMBRO (donde la hoja se une a la cabeza).'
+            : bladeScan.candidates.length > 0
+            ? `${bladeScan.candidates.length} hoja(s) detectada(s). Elige la llave que quieres reproducir o márcala a mano si no es correcta.`
+            : 'Marca la hoja a mano: primero la punta y después el hombro.';
+        }
+
+        function currentBlade() {
+          if (!bladeScan) return null;
+          if (bladeScan.manual && bladeScan.manual.shoulder) return bladeScan.manual;
+          return bladeScan.candidates[bladeScan.selected] || null;
+        }
+
+        /** Dibuja la foto, las hojas detectadas y el perfil medido de la seleccionada. */
+        function drawBladeOverlay(sampled) {
+          if (!bladeScan) return;
+          const cvs = cvsProcessing;
+          cvs.width = bladeScan.w;
+          cvs.height = bladeScan.h;
+          const ctx = cvs.getContext('2d');
+          ctx.drawImage(bladeScan.base, 0, 0);
+          const lw = Math.max(2, Math.round(Math.min(cvs.width, cvs.height) * 0.006));
+          const active = currentBlade();
+          bladeScan.candidates.forEach((cand, i) => {
+            const on = cand === active;
+            ctx.strokeStyle = on ? '#10ff88' : 'rgba(34, 211, 238, 0.85)';
+            ctx.lineWidth = on ? lw * 1.4 : lw;
+            ctx.beginPath();
+            ctx.moveTo(cand.tip.x, cand.tip.y);
+            ctx.lineTo(cand.shoulder.x, cand.shoulder.y);
+            ctx.stroke();
+            ctx.fillStyle = on ? '#10ff88' : '#22d3ee';
+            ctx.font = `bold ${Math.max(12, lw * 6)}px sans-serif`;
+            ctx.fillText(String(i + 1), cand.tip.x - lw * 6, cand.tip.y + lw * 2);
+          });
+          if (bladeScan.manual) {
+            ctx.fillStyle = '#f59e0b';
+            for (const p of [bladeScan.manual.tip, bladeScan.manual.shoulder]) {
+              if (!p) continue;
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, lw * 2, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+          // Bordes medidos de la hoja seleccionada
+          if (sampled) {
+            ctx.strokeStyle = '#10ff88';
+            ctx.lineWidth = Math.max(1.5, lw * 0.7);
+            for (const side of ['a', 'b']) {
+              ctx.beginPath();
+              sampled.cuts.forEach((c, i) => {
+                if (c.width <= 0) return;
+                const x = sampled.T.x + sampled.u.x * c.s + sampled.n.x * c[side];
+                const y = sampled.T.y + sampled.u.y * c.s + sampled.n.y * c[side];
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+              });
+              ctx.stroke();
+            }
+          }
+        }
+
+        /** Mide la hoja elegida y genera el modelo 3D de la llave completa. */
+        function applyBladeSelection() {
+          const blade = currentBlade();
+          if (!bladeScan || !blade) return;
+          const sampled = window.KeyBlade.sampleBlade(bladeScan.mask, bladeScan.w, bladeScan.h, blade.tip, blade.shoulder);
+          if (!sampled) {
+            showScannerError('La hoja marcada es demasiado corta. Marca la punta y el hombro más separados.');
+            return;
+          }
+          const ref = getReference();
+          let finalKey = null;
+          if (ref.type === 'total') {
+            // «Largo total»: la cabeza es estándar, así que la hoja mide el total menos cuello y cabeza
+            const first = window.KeyBlade.buildKeyOutline(sampled, { type: 'height', mm: 8.5 });
+            const bladeMm = first ? ref.mm - (first.totalLengthMm - first.bladeLengthMm) : 0;
+            finalKey = bladeMm > 5 ? window.KeyBlade.buildKeyOutline(sampled, { type: 'length', mm: bladeMm }) : null;
+          } else {
+            finalKey = window.KeyBlade.buildKeyOutline(sampled, ref);
+          }
+          if (!finalKey) {
+            showScannerError('No se pudo medir la hoja con esa medida: revisa la calibración, prueba otra llave o márcala a mano.');
+            return;
+          }
+          clearScannerError();
+          drawBladeOverlay(sampled);
+          showProcessedCanvas('Hoja seleccionada y perfil medido');
+
+          const profile = finalKey.outline.slice();
+          profile.bowHole = finalKey.bowHole;
+          profile.noGroove = true; // el surco de la foto no se conoce: no se inventa
+          window.extractedProfile2D = profile;
+          lastRawPixelProfile = null;
+          lastProfileSource = 'scanner-key';
+          window.__activeKeyFilenameBase = 'escaner';
+          const info = `Hoja ${finalKey.bladeLengthMm.toFixed(1)} × ${finalKey.bladeHeightMm.toFixed(1)} mm · llave ${finalKey.totalLengthMm.toFixed(1)} mm`;
+          if (calibrationScaleInfo) {
+            calibrationScaleInfo.textContent = `Escala: ${finalKey.mmPerPx.toFixed(4)} mm/px · ${info}`;
+          }
+          visionResultInfo.textContent = info;
+          visionResultInfo.classList.remove('text-gray-400');
+          visionResultInfo.classList.add('text-emerald-400');
+          viewerSubstatus.textContent = `Llave generada desde la foto: ${info}.`;
+          if (typeof window.generate3DModel === 'function') {
+            window.generate3DModel(profile);
+          }
+        }
+
+        function startManualBlade() {
+          if (!bladeScan) return;
+          bladeScan.manual = { tip: null, shoulder: null };
+          bladeScan.picking = 1;
+          renderBladeCandidates();
+          drawBladeOverlay();
+          showProcessedCanvas('Marca la punta y el hombro de la hoja');
+        }
+
+        if (btnManualBlade) btnManualBlade.addEventListener('click', startManualBlade);
+
+        cvsProcessing.addEventListener('click', (event) => {
+          if (!bladeScan || !bladeScan.picking) return;
+          const rect = cvsProcessing.getBoundingClientRect();
+          const p = {
+            x: ((event.clientX - rect.left) / rect.width) * cvsProcessing.width,
+            y: ((event.clientY - rect.top) / rect.height) * cvsProcessing.height,
+          };
+          if (bladeScan.picking === 1) {
+            bladeScan.manual = { tip: p, shoulder: null };
+            bladeScan.picking = 2;
+            renderBladeCandidates();
+            drawBladeOverlay();
+          } else {
+            bladeScan.manual.shoulder = p;
+            bladeScan.picking = 0;
+            renderBladeCandidates();
+            applyBladeSelection();
+          }
+        });
+
+        if (scanModeSelect) {
+          scanModeSelect.addEventListener('change', () => {
+            const key = getScanMode() === 'key';
+            if (refTypeSelect) {
+              refTypeSelect.querySelector('option[value="height"]').disabled = !key;
+              refTypeSelect.querySelector('option[value="length"]').disabled = !key;
+              if (!key) {
+                refTypeSelect.value = 'total';
+                inputRealWidth.value = '55.0';
+              } else if (refTypeSelect.value === 'total') {
+                refTypeSelect.value = 'height';
+                inputRealWidth.value = '8.5';
+              }
+            }
+            if (hasProcessedResult) processKeySilhouette();
+          });
+        }
+        if (refTypeSelect) {
+          refTypeSelect.addEventListener('change', () => {
+            const presets = { height: '8.5', length: '30.0', total: '55.0' };
+            inputRealWidth.value = presets[refTypeSelect.value] || inputRealWidth.value;
+            recalibrateActiveScannerModel();
+          });
         }
         /* === FIN LÓGICA DE OPENCV.JS === */
 
@@ -1310,6 +1575,8 @@
             currentObjectUrl = null;
           }
           window.extractedProfile2D = [];
+          bladeScan = null;
+          if (bladePicker) bladePicker.classList.add('hidden');
           lastRawPixelProfile = null;
           lastProfileSource = null;
           hasProcessedResult = false;
@@ -1355,6 +1622,8 @@
           }
 
           window.extractedProfile2D = [];
+          bladeScan = null;
+          if (bladePicker) bladePicker.classList.add('hidden');
           lastRawPixelProfile = null;
           lastProfileSource = null;
           hasProcessedResult = false;
@@ -1382,7 +1651,7 @@
           previewActions.classList.remove('hidden');
           btnClearImage.classList.remove('hidden');
           metaFilename.textContent = file.name;
-          viewerSubstatus.textContent = `Imagen cargada: "${file.name}". Pulsa "Procesar Silueta" para generar el 3D.`;
+          viewerSubstatus.textContent = `Imagen cargada: "${file.name}". Pulsa "Procesar foto" para generar el 3D.`;
         }
 
         function loadSampleImage() {
@@ -1396,6 +1665,8 @@
           }
 
           window.extractedProfile2D = [];
+          bladeScan = null;
+          if (bladePicker) bladePicker.classList.add('hidden');
           lastRawPixelProfile = null;
           lastProfileSource = null;
           hasProcessedResult = false;
@@ -1415,8 +1686,10 @@
           imgPreview.onerror = null;
           imgPreview.crossOrigin = 'Anonymous';
 
+          if (scanModeSelect) scanModeSelect.value = 'key';
+          if (refTypeSelect) refTypeSelect.value = 'height';
           if (inputRealWidth) {
-            inputRealWidth.value = '55.0';
+            inputRealWidth.value = '8.5';
           }
 
           imgPreview.onload = () => {
@@ -1508,6 +1781,10 @@
         btnProcessSilhouette.addEventListener('click', processKeySilhouette);
 
         function recalibrateActiveScannerModel() {
+          if (lastProfileSource === 'scanner-key' || (bladeScan && currentBlade())) {
+            applyBladeSelection();
+            return;
+          }
           if (!lastRawPixelProfile || lastRawPixelProfile.length < 3) return;
           if (lastProfileSource !== 'scanner') return;
 
@@ -1520,9 +1797,11 @@
               `Escala: ${scaleFactor.toFixed(4)} mm/px (${Math.round(pixelWidth)} px → ${realWidthMm.toFixed(1)} mm)`;
           }
           visionResultInfo.textContent =
-            `Silueta calibrada: ${scaledPoints.length} vértices · ancho ${realWidthMm.toFixed(1)} mm`;
+            `Silueta calibrada: ${scaledPoints.length} vértices · largo ${realWidthMm.toFixed(1)} mm`;
+          visionResultInfo.classList.remove('text-gray-400');
+          visionResultInfo.classList.add('text-emerald-400');
           viewerSubstatus.textContent =
-            `Perfil 2D recalibrado a ${realWidthMm.toFixed(1)} mm reales (${scaledPoints.length} vértices).`;
+            `Silueta completa escalada a ${realWidthMm.toFixed(1)} mm de largo (${scaledPoints.length} vértices).`;
 
           if (typeof window.generate3DModel === 'function') {
             window.generate3DModel(window.extractedProfile2D);
@@ -1538,6 +1817,10 @@
           btn.addEventListener('click', () => {
             if (!inputRealWidth) return;
             inputRealWidth.value = btn.dataset.calPreset || '8.5';
+            if (refTypeSelect && btn.dataset.calType) {
+              const opt = refTypeSelect.querySelector(`option[value="${btn.dataset.calType}"]`);
+              if (opt && !opt.disabled) refTypeSelect.value = btn.dataset.calType;
+            }
             recalibrateActiveScannerModel();
           });
         });
@@ -3049,6 +3332,110 @@
           return true;
         }
 
+        /**
+         * El CSG del surco deja uniones en T (un vértice en mitad de la arista de otro triángulo) y el
+         * STL salía con aristas abiertas. Se sueldan los vértices y se parten los triángulos afectados
+         * para que la malla quede estanca.
+         */
+        function weldAndFixTJunctions(geometry) {
+          const src = geometry.index ? geometry.toNonIndexed() : geometry;
+          const pos = src.getAttribute('position').array;
+          const verts = [];
+          const keyOf = new Map();
+          const q = (v) => Math.round(v * 1e4);
+          const vid = (x, y, z) => {
+            const k = q(x) + ',' + q(y) + ',' + q(z);
+            let id = keyOf.get(k);
+            if (id === undefined) {
+              id = verts.length;
+              verts.push([x, y, z]);
+              keyOf.set(k, id);
+            }
+            return id;
+          };
+          let tris = [];
+          for (let i = 0; i < pos.length; i += 9) {
+            const a = vid(pos[i], pos[i + 1], pos[i + 2]);
+            const b = vid(pos[i + 3], pos[i + 4], pos[i + 5]);
+            const c = vid(pos[i + 6], pos[i + 7], pos[i + 8]);
+            if (a !== b && b !== c && a !== c) tris.push([a, b, c]);
+          }
+          // Rejilla espacial para buscar vértices sobre una arista
+          const cell = 0.5;
+          const grid = new Map();
+          verts.forEach((v, i) => {
+            const k = Math.floor(v[0] / cell) + ',' + Math.floor(v[1] / cell) + ',' + Math.floor(v[2] / cell);
+            if (!grid.has(k)) grid.set(k, []);
+            grid.get(k).push(i);
+          });
+          const onEdge = (ia, ib) => {
+            const A = verts[ia];
+            const B = verts[ib];
+            const d = [B[0] - A[0], B[1] - A[1], B[2] - A[2]];
+            const len2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+            if (len2 < 1e-10) return -1;
+            const lo = [0, 1, 2].map((k) => Math.floor(Math.min(A[k], B[k]) / cell));
+            const hi = [0, 1, 2].map((k) => Math.floor(Math.max(A[k], B[k]) / cell));
+            let best = -1;
+            let bestT = 2;
+            for (let x = lo[0]; x <= hi[0]; x++) {
+              for (let y = lo[1]; y <= hi[1]; y++) {
+                for (let z = lo[2]; z <= hi[2]; z++) {
+                  const list = grid.get(x + ',' + y + ',' + z);
+                  if (!list) continue;
+                  for (const iv of list) {
+                    if (iv === ia || iv === ib) continue;
+                    const P = verts[iv];
+                    const t = ((P[0] - A[0]) * d[0] + (P[1] - A[1]) * d[1] + (P[2] - A[2]) * d[2]) / len2;
+                    if (t <= 1e-6 || t >= 1 - 1e-6) continue;
+                    const cx = A[0] + d[0] * t - P[0];
+                    const cy = A[1] + d[1] * t - P[1];
+                    const cz = A[2] + d[2] * t - P[2];
+                    if (cx * cx + cy * cy + cz * cz < 1e-8 && t < bestT) {
+                      bestT = t;
+                      best = iv;
+                    }
+                  }
+                }
+              }
+            }
+            return best;
+          };
+          for (let pass = 0; pass < 12; pass++) {
+            let changed = false;
+            const out = [];
+            for (const t of tris) {
+              let split = false;
+              for (let e = 0; e < 3 && !split; e++) {
+                const a = t[e];
+                const b = t[(e + 1) % 3];
+                const c = t[(e + 2) % 3];
+                const v = onEdge(a, b);
+                if (v >= 0) {
+                  out.push([a, v, c], [v, b, c]);
+                  split = true;
+                  changed = true;
+                }
+              }
+              if (!split) out.push(t);
+            }
+            tris = out;
+            if (!changed) break;
+          }
+          const arr = new Float32Array(tris.length * 9);
+          tris.forEach((t, i) => {
+            for (let k = 0; k < 3; k++) {
+              arr[i * 9 + k * 3] = verts[t[k]][0];
+              arr[i * 9 + k * 3 + 1] = verts[t[k]][1];
+              arr[i * 9 + k * 3 + 2] = verts[t[k]][2];
+            }
+          });
+          const fixed = new THREE.BufferGeometry();
+          fixed.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+          fixed.computeVertexNormals();
+          return fixed;
+        }
+
         function generate3DModel(profilePoints) {
           if (!Array.isArray(profilePoints) || profilePoints.length < 3) {
             console.warn('generate3DModel: el perfil 2D no contiene suficientes puntos.');
@@ -3128,8 +3515,18 @@
           }
 
           if (!hasScannerHoles && bowHole && bowHole.radius > 0) {
+            // Agujero como polígono de 48 lados: con absarc la triangulación dejaba caras duplicadas
+            // y el STL salía con aristas abiertas (no estanco para el laminador)
             const holePath = new THREE.Path();
-            holePath.absarc(bowHole.x, bowHole.y, bowHole.radius, 0, Math.PI * 2, false);
+            const segs = 48;
+            for (let k = 0; k < segs; k++) {
+              const ang = (2 * Math.PI * k) / segs;
+              const hx = bowHole.x + bowHole.radius * Math.cos(ang);
+              const hy = bowHole.y + bowHole.radius * Math.sin(ang);
+              if (k === 0) holePath.moveTo(hx, hy);
+              else holePath.lineTo(hx, hy);
+            }
+            holePath.closePath();
             shape.holes.push(holePath);
           }
 
@@ -3176,7 +3573,7 @@
 
           // Fresado del surco lateral (warding) mediante CSG para llaves paramétricas
           let bladeInfo = points.bladeInfo || null;
-          if (!bladeInfo && bowHole) {
+          if (!bladeInfo && bowHole && !points.noGroove) {
             let maxX = -Infinity;
             for (const pt of points) {
               if (pt.x > maxX) maxX = pt.x;
@@ -3253,7 +3650,8 @@
                 }
 
                 geometry.dispose();
-                geometry = carvedGeometry;
+                geometry = weldAndFixTJunctions(carvedGeometry);
+                carvedGeometry.dispose();
               }
             } catch (csgErr) {
               console.warn('No se pudo tallar el surco lateral con CSG:', csgErr);

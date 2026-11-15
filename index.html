@@ -1253,6 +1253,14 @@
 
           clearScannerError();
 
+          // Si el navegador mezcló versiones (index.html nuevo con un keyblade.js antiguo de la caché),
+          // avisar con claridad en lugar de fallar a mitad del procesado
+          const kb = window.KeyBlade;
+          if (!kb || typeof kb.grooveProfile !== 'function' || typeof kb.buildGroovedMesh !== 'function') {
+            showScannerError('Se ha cargado una versión antigua del motor desde la caché del navegador. Recarga la página forzando la actualización (Ctrl+F5, o Cmd+Shift+R en Mac).');
+            return;
+          }
+
           let src = null;
           let gray = null;
           let blurred = null;
@@ -1313,8 +1321,10 @@
               processFullSilhouette(src, morph);
             }
           } catch (err) {
-            console.error('Error en el procesamiento OpenCV:', err);
-            showScannerError('Ocurrió un error al procesar la imagen con OpenCV.');
+            console.error('Error al procesar la imagen:', err);
+            // La causa concreta ayuda a diagnosticar (antes todo salía como «error de OpenCV»)
+            const detail = err && err.message ? err.message : String(err);
+            showScannerError(`No se pudo procesar la imagen: ${detail}. Si acabas de abrir una versión nueva, recarga con Ctrl+F5; si sigue fallando, prueba otra foto o márcala a mano.`);
           } finally {
             if (src) src.delete();
             if (gray) gray.delete();

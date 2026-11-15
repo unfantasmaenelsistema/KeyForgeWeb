@@ -1,63 +1,88 @@
-# KeyForge Web — Generador 3D de Llaves Paramétrico y por Visión Artificial
+<p align="center">
+  <a href="https://www.unfantasmaenelsistema.com/" target="_blank" rel="noopener noreferrer">
+    <img src="./public/assets/logo.png" alt="Logo Un Fantasma en el Sistema" width="96" />
+  </a>
+</p>
 
-Aplicativo web **100 % client-side** (sin servidor ni envío de datos externos) para el diseño geométrico, calibración dimensional y exportación CAD/STL de modelos 3D de llaves, combinando **visión por computador (OpenCV.js)**, **modelado paramétrico CAD** y **renderizado WebGL PBR con operaciones booleanas CSG (Three.js)**.
+# KeyForge Web: de la foto de una llave a un modelo 3D imprimible
 
----
+Aplicación web **100 % en el navegador** (la foto no sale de tu equipo) que convierte la fotografía de una llave en un **modelo 3D listo para imprimir (STL a escala 1:1 mm)**. También genera llaves a partir de un **código de corte** de los perfiles más comunes. Usa **OpenCV.js** para la visión por computador y **Three.js** para el modelo 3D.
 
-## Capturas reales de la aplicación
-
-### 1. Modo Manual Paramétrico, Regla Milimétrica 2D y Visor 3D PBR + CSG
-Validación en tiempo real de restricciones mecánicas (MACS), perfil vectorial 2D con regla milimétrica referenciada al hombro `0(H)`, surco lateral fresado mediante CSG y renderizado metálico en **Latón Clásico**:
-
-![Modo Manual con regla milimétrica y visor 3D en latón](docs/screenshots/01-modo-manual-3d-laton.png)
-
-### 2. Transferencia por Código QR e Informe Técnico (`.txt`)
-Generación instantánea de códigos QR con las especificaciones geométricas en JSON (descargable en PNG o copiable al portapapeles) y exportación de informes técnicos en texto plano:
-
-![Panel de código QR y exportación técnica](docs/screenshots/02-modo-manual-qr-auditoria.png)
-
-### 3. Modo Escáner Óptico con OpenCV.js
-Extracción automática del contorno exterior y del orificio del mango (`cv.RETR_CCOMP`) a partir de fotografías cenitales o de la imagen de calibración integrada (`sample.png`), con conversión píxel-a-milímetro para impresión 3D:
-
-![Modo Escáner con detección de contorno OpenCV.js y extrusión 3D](docs/screenshots/03-modo-escaner-opencv-3d.png)
+**[▶ Abrir KeyForge Web](https://unfantasmaenelsistema.github.io/KeyForgeWeb/)**
 
 ---
 
-## Características principales
+## Capturas de pantalla
 
-### Modo Escáner (Visión por Computador — OpenCV.js)
-- **Carga flexible**: Arrastrar y soltar (`Drag & Drop`), selector de archivos (`JPG`, `PNG`, `WEBP`) o botón de prueba rápida con imagen de calibración integrada (`./sample.png`).
-- **Pipeline de visión**: Conversión a escala de grises, desenfoque gaussiano, umbralización automática de Otsu, cierre morfológico y detección jerárquica de contornos (`cv.RETR_CCOMP`) para capturar tanto la silueta exterior como el orificio interior del mango.
-- **Calibración dimensional 1:1 mm**: Escalado proporcional en milímetros reales con accesos rápidos (`8.5 mm` hoja / `55 mm` llave completa) y control de grosor de extrusión Z (`mm`).
+> Capturas reales de la versión 2, tomadas sobre la compilación de producción.
 
-### Modo Manual (Motor Paramétrico y Validación MACS)
-- **Geometría realista**:
-  - Rampa de ataque en la punta y chaflán inferior de entrada.
-  - Cortes trapezoidales precisos con ángulo de fresado y valle plano según especificación.
-  - Topes de hombro y mango ergonómico circular continuo generado por interpolación trigonométrica (`49` puntos).
-- **Validación en tiempo real**: Comprobación de longitud exacta, rango permitido por perfil y especificación **MACS** (*Maximum Adjacent Cut Specification*).
-- **Regla milimétrica 2D superpuesta**: Cuadrícula calibrada cada `1 mm` y `5 mm`, eje `0(H)` en el hombro, cotas de altura y profundidad de fresado por cada pin.
+### 1. Foto de un llavero: se detectan las hojas y se mide la elegida
+La imagen de ejemplo (`sample.png`) tiene tres llaves y una anilla. KeyForge encuentra las tres hojas, descarta la anilla, mide el dentado de la llave elegida (en verde) y lo escala a milímetros con la altura de la hoja (8,5 mm por defecto).
 
-### Visor 3D WebGL, CSG y Materiales PBR
-- **Fresado booleano CSG (`three-csg-ts`)**: Sustracción automática del surco lateral longitudinal (*warding*) a lo largo de la hoja antes de exportar la malla final.
-- **Acabado metálico PBR procedural**: Mapas *normal map* y *roughness map* de metal cepillado generados por código sin dependencias de texturas externas, combinados con mapa de entorno de estudio (`PMREMGenerator`).
-- **Selector de Material de Impresión**:
-  - Acero Inoxidable (`metalness: 0.90`)
-  - Latón Clásico (`metalness: 0.92`)
-  - Aluminio Anodizado (`metalness: 0.82`)
-  - Bronce / Cobre (`metalness: 0.90`)
-  - PLA / Resina Prototipo (`metalness: 0.08`)
-- **Controles de inspección**: `OrbitControls` con amortiguación, botón **Centrar Vista**, modo de **Exhibición Z** (rotación automática pausada al interactuar) y ajuste directo del grosor Z.
+![Escáner con las tres hojas de la muestra detectadas y la llave 1 seleccionada](docs/screenshots/01-escaner-muestra.png)
 
-### Exportación e Interoperabilidad
-- **Modelo 3D `.stl`**: Exportación directa en escala exacta `1 unidad = 1 mm` lista para laminadores de impresión 3D (Cura, PrusaSlicer, Bambu Studio, etc.).
-- **Captura de pantalla `.png`**: Renderizado síncrono desde el canvas WebGL de Three.js.
-- **Informe técnico `.txt`**: Resumen completo con parámetros del fabricante, dimensiones globales y tabla de profundidades de corte por pin.
-- **Código QR (`.png` / JSON)**: Codificación de los cortes y parámetros geométricos para compartir entre dispositivos sin conexión.
+### 2. Modelo 3D imprimible
+Hoja medida en la foto + cabeza estándar con agujero para la anilla. La malla es estanca y se descarga en STL a escala real.
+
+![Visor 3D con la llave generada en latón](docs/screenshots/02-modelo-3d.png)
+
+### 3. Foto propia de una sola llave
+Funciona con la llave girada en cualquier ángulo y con brillos del metal.
+
+![Foto de una llave girada con su hoja detectada](docs/screenshots/03-foto-propia.png)
+
+### 4. Modo manual por código de corte
+Perfiles Kwikset, Schlage, Best, Master Lock y Yale, con validación MACS, regla milimétrica, informe técnico y código QR.
+
+![Modo manual con la llave paramétrica, la regla y el visor 3D](docs/screenshots/04-modo-manual.png)
+
+### 5. Versión móvil
+<img src="docs/screenshots/05-movil.png" alt="KeyForge Web en un móvil" width="300" />
 
 ---
 
-## Perfiles de fabricante incluidos
+## Cómo sacar un buen STL de una foto
+
+1. **Haz la foto desde arriba**, con la llave plana sobre un papel blanco o un fondo claro y liso, y buena luz sin sombras duras. Cuanto más perpendicular, menos se deforma la hoja.
+2. **Carga la foto** (arrastrar, selector o el botón de la imagen de ejemplo) y pulsa **Procesar foto**.
+3. **Elige la llave** si hay varias (botones *Llave 1, 2, 3…*). Si la detección no es buena, pulsa **Marcar a mano** y haz dos clics: primero en la **punta** de la hoja y después en el **hombro** (donde la hoja se une a la cabeza).
+4. **Calibra con una medida real**, tomada con una regla o un calibre. La foto no sabe a qué distancia se hizo, así que esta medida fija la escala:
+   - **Altura de la hoja** (del lomo al punto más alto del dentado). Es la opción más fiable.
+   - **Longitud de la hoja** (del hombro a la punta).
+   - **Largo total de la llave.**
+5. Ajusta el **grosor** (2,2 mm por defecto), elige material y **descarga el STL**.
+
+### Qué reproduce y qué no
+- Reproduce el **contorno de la hoja**: dentado, punta y hombro, con la escala que le indiques. En una foto sintética con medidas conocidas, el dentado se recupera con un error medio de unos 0,1 mm.
+- La **cabeza** es estándar (Ø 24 mm con agujero de 5 mm): la de la foto suele estar tapada por otras llaves o por la anilla y no influye en el funcionamiento.
+- **No puede ver el perfil lateral** (los surcos longitudinales de la hoja). Una llave impresa plana no entra en un bombín con perfil de seguridad: sirve para estudiar, enseñar o hacer maquetas, o como base para tallar el perfil.
+- El modo **Silueta completa** extruye el contorno exterior entero tal cual, para fotos de una sola llave tomada desde arriba.
+
+---
+
+## Funcionalidades
+
+### Escáner (OpenCV.js + extractor de hojas)
+- **Segmentación**: escala de grises, desenfoque gaussiano, umbral de Otsu y cierre morfológico. Los brillos del metal se rellenan, pero se respeta el interior de la anilla.
+- **Detección de hojas** (`public/keyblade.js`): toma como posible punta cada punto extremo del contorno y sigue la hoja hacia dentro por los puntos medios de sus cortes, hasta el ensanchamiento del hombro. Descarta los trazos curvos o finos, como la anilla.
+- **Medición del perfil**: cortes perpendiculares al eje que no saltan a una llave vecina. El borde dentado se coloca arriba y el lomo se endereza.
+- **Escala** por altura de hoja, longitud de hoja o largo total. Las fotos grandes se procesan a 1.200 px de lado.
+- **Marcado manual** con dos clics cuando la detección automática no basta.
+
+### Modo manual (motor paramétrico y validación MACS)
+- Rampa de entrada en la punta, cortes trapezoidales con ángulo de fresado y valle plano, topes de hombro y mango circular.
+- Validación en tiempo real de la longitud del código, del rango de cada perfil y de la especificación **MACS** (*Maximum Adjacent Cut Specification*).
+- Regla milimétrica 2D con el eje `0(H)` en el hombro y cotas por pin.
+- Surco lateral fresado con CSG (`three-csg-ts`). La malla se suelda después para que el STL siga siendo estanco.
+
+### Visor 3D y exportación
+- Materiales PBR (acero, latón, aluminio, bronce y PLA), `OrbitControls`, centrar vista y rotación de exhibición.
+- **STL** a escala `1 unidad = 1 mm`, listo para Cura, PrusaSlicer o Bambu Studio.
+- Captura **PNG**, informe técnico **.txt** y **código QR** con la especificación (modo manual).
+
+---
+
+## Perfiles de fabricante incluidos (modo manual)
 
 | Perfil | Pines | Rango de cortes | MACS | Distancia punta-pin 1 | Paso entre pines |
 | :--- | :---: | :---: | :---: | :---: | :---: |
@@ -72,29 +97,24 @@ Extracción automática del contorno exterior y del orificio del mango (`cv.RETR
 
 ## Instalación y desarrollo local
 
-Requisitos previos: **Node.js 18+** y **npm**.
+Requisitos: **[Bun](https://bun.sh/)** (el proyecto usa `bun.lock`).
 
 ```bash
-# 1. Instalar dependencias
-npm install
-
-# 2. Iniciar servidor de desarrollo (http://localhost:3000)
-npm run dev
-
-# 3. Compilar para producción (genera ./dist)
-npm run build
+git clone https://github.com/unfantasmaenelsistema/KeyForgeWeb.git
+cd KeyForgeWeb
+bun install
+bun run dev        # http://localhost:3000
+bun test           # pruebas del extractor de hojas
+bun run build      # genera ./dist
 ```
+
+OpenCV.js (4.9.0) y Three.js (r128) se cargan desde CDN con la versión fija; Tailwind CSS se compila en el build.
 
 ---
 
 ## Despliegue en GitHub Pages
 
-El repositorio incluye un flujo automático en `.github/workflows/deploy-pages.yml` configurado para compilar el proyecto con Vite (`base: './'`) y publicarlo en **GitHub Pages** en cada `push` a la rama `main`:
-
-1. Sube este repositorio a GitHub.
-2. Ve a **Settings → Pages** en tu repositorio.
-3. En **Build and deployment → Source**, selecciona **GitHub Actions**.
-4. Realiza un `push` a `main` o ejecuta manualmente el workflow **Desplegar KeyForge Web en GitHub Pages**.
+El flujo [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml) se ejecuta en cada `push` a `main`. Instala con Bun (`bun install --frozen-lockfile`), pasa las pruebas, compila `./dist` y lo publica en https://unfantasmaenelsistema.github.io/KeyForgeWeb/ (en **Settings → Pages**, la fuente es **GitHub Actions**).
 
 ---
 
@@ -102,30 +122,40 @@ El repositorio incluye un flujo automático en `.github/workflows/deploy-pages.y
 
 ```text
 .
-├── .github/
-│   └── workflows/
-│       └── deploy-pages.yml   # Despliegue automático en GitHub Pages
-├── docs/
-│   └── screenshots/           # Capturas reales de la aplicación
+├── .github/workflows/deploy-pages.yml  # Pruebas, compilación con Bun y despliegue en Pages
+├── docs/screenshots/                   # Capturas reales (PNG)
 ├── public/
-│   ├── .nojekyll              # Desactiva Jekyll en GitHub Pages
-│   ├── assets/aistudio/       # Logotipo e icono de cabecera
-│   └── sample.png             # Imagen de calibración óptica integrada
-├── src/                       # Punto de entrada auxiliar Vite
-├── index.html                 # Aplicación completa (UI, OpenCV.js, Motor Paramétrico y Three.js)
-├── vite.config.ts             # Configuración Vite con base relativa ('./')
-├── LICENSE                    # Licencia MIT
+│   ├── keyblade.js                     # Extractor de hojas: detección, medición y contorno imprimible
+│   ├── sample.png                      # Foto de ejemplo (tres llaves y una anilla)
+│   └── assets/logo.png                 # Logotipo
+├── src/styles.css                      # Entrada de Tailwind CSS
+├── tests/keyblade.test.js              # Pruebas con una foto sintética de medidas conocidas
+├── index.html                          # Aplicación (UI, OpenCV.js, motor paramétrico y Three.js)
+├── tailwind.config.js · postcss.config.js · vite.config.js
+├── LICENSE                             # MIT
 └── README.md
 ```
 
 ---
 
-## Nota de uso responsable
+## Novedades de la versión 2
 
-KeyForge Web está diseñado con fines educativos, de ingeniería inversa geométrica, fabricación aditiva y evaluación técnica autorizada. Utiliza esta herramienta únicamente sobre llaves, cerraduras y prototipos de tu propiedad o bajo autorización expresa.
+- **La foto de una llave ya genera una llave.** Antes el escáner extruía el contorno exterior más grande: con `sample.png` salía un bloque con las tres llaves y la anilla, escalado por el ancho de la imagen. Ahora aísla una hoja, mide su dentado y construye una llave imprimible.
+- **Calibración real**: por altura de hoja, longitud de hoja o largo total. Antes se escalaba el ancho horizontal de la imagen, que en una llave girada no es ninguna medida.
+- **Silueta completa alineada** con su eje largo antes de escalarla.
+- **STL estanco**: el agujero de la cabeza dejaba triángulos duplicados y el surco CSG del modo manual dejaba uniones en T, así que los dos STL tenían aristas abiertas. Ahora el agujero es poligonal y la malla del CSG se suelda.
+- **Despliegue reparado**: el workflow usaba la caché de npm sin `package-lock.json` y fallaba siempre. Ahora usa Bun, pasa las pruebas y publica.
+- **Dependencias fijas**: OpenCV.js 4.9.0 en lugar de `4.x`, y Tailwind compilado en lugar del CDN de desarrollo.
+- **Limpieza**: fuera el esqueleto de React sin uso y los restos de AI Studio.
+
+---
+
+## Uso responsable
+
+KeyForge Web tiene fines educativos y de fabricación aditiva. Úsalo solo con llaves y cerraduras tuyas o con autorización expresa de su propietario. Copiar la llave de otra persona a partir de una foto sin su permiso puede ser delito.
 
 ---
 
 ## Licencia
 
-Distribuido bajo licencia **MIT**. Consulta el archivo [`LICENSE`](LICENSE) para más información.
+Distribuido bajo licencia **MIT**. Consulta el archivo [`LICENSE`](LICENSE).

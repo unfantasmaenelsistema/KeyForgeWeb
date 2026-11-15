@@ -31,12 +31,19 @@ Funciona con la llave girada en cualquier ángulo y con brillos del metal.
 
 ![Foto de una llave girada con su hoja detectada](docs/screenshots/03-foto-propia.png)
 
-### 4. Modo manual por código de corte
+### 4. Surcos laterales estimados en la foto
+El brillo de la hoja se promedia a lo largo de ella: los surcos aparecen como bandas de sombra (y el brillo de su pared) en la gráfica. Cada surco se puede activar o desactivar, y se ajustan la profundidad y las caras.
+
+![Panel de surcos con la gráfica del perfil y dos surcos detectados](docs/screenshots/06-surcos-panel.png)
+
+![Modelo 3D con los dos surcos tallados en la hoja](docs/screenshots/07-surcos-3d.png)
+
+### 5. Modo manual por código de corte
 Perfiles Kwikset, Schlage, Best, Master Lock y Yale, con validación MACS, regla milimétrica, informe técnico y código QR.
 
 ![Modo manual con la llave paramétrica, la regla y el visor 3D](docs/screenshots/04-modo-manual.png)
 
-### 5. Versión móvil
+### 6. Versión móvil
 <img src="docs/screenshots/05-movil.png" alt="KeyForge Web en un móvil" width="300" />
 
 ---
@@ -50,12 +57,18 @@ Perfiles Kwikset, Schlage, Best, Master Lock y Yale, con validación MACS, regla
    - **Altura de la hoja** (del lomo al punto más alto del dentado). Es la opción más fiable.
    - **Longitud de la hoja** (del hombro a la punta).
    - **Largo total de la llave.**
-5. Ajusta el **grosor** (2,2 mm por defecto), elige material y **descarga el STL**.
+5. Revisa los **surcos laterales** propuestos (panel *Surcos laterales*): activa o desactiva cada uno, ajusta la profundidad (0,6 mm por defecto) y elige si van en la cara de la foto o en las dos.
+6. Ajusta el **grosor** (2,2 mm por defecto), elige material y **descarga el STL**.
+
+### Fotos para que se vean los surcos
+- **Acerca la cámara**: la hoja debería medir al menos 60 px de alto en la foto (la app avisa si es menos).
+- **Luz lateral suave**, que marque sombra dentro de los surcos, y **sin reflejos directos** del flash o de una lámpara sobre el metal.
+- La llave **plana y entera en la foto**: los surcos se buscan a lo largo de toda la hoja, y un brillo que solo cubre un tramo se descarta.
 
 ### Qué reproduce y qué no
 - Reproduce el **contorno de la hoja**: dentado, punta y hombro, con la escala que le indiques. En una foto sintética con medidas conocidas, el dentado se recupera con un error medio de unos 0,1 mm.
 - La **cabeza** es estándar (Ø 24 mm con agujero de 5 mm): la de la foto suele estar tapada por otras llaves o por la anilla y no influye en el funcionamiento.
-- **No puede ver el perfil lateral** (los surcos longitudinales de la hoja). Una llave impresa plana no entra en un bombín con perfil de seguridad: sirve para estudiar, enseñar o hacer maquetas, o como base para tallar el perfil.
+- Los **surcos laterales** se estiman en la foto de la cara: su **posición y anchura** salen de las bandas de sombra y brillo, pero la **profundidad** y la forma exacta del perfil no se pueden medir en una foto de frente (se tallan como canales rectos de la profundidad que indiques). La llave tendrá los surcos donde deben ir, pero no se garantiza que entre en un bombín con perfil de seguridad. En una impresora FDM los surcos de menos de 1 mm apenas se notan; en resina, mucho más.
 - El modo **Silueta completa** extruye el contorno exterior entero tal cual, para fotos de una sola llave tomada desde arriba.
 
 ---
@@ -74,6 +87,16 @@ Perfiles Kwikset, Schlage, Best, Master Lock y Yale, con validación MACS, regla
 - Validación en tiempo real de la longitud del código, del rango de cada perfil y de la especificación **MACS** (*Maximum Adjacent Cut Specification*).
 - Regla milimétrica 2D con el eje `0(H)` en el hombro y cotas por pin.
 - Surco lateral fresado con CSG (`three-csg-ts`). La malla se suelda después para que el STL siga siendo estanco.
+
+### Surcos laterales (estimados en la foto)
+- **Perfil de brillo** a lo ancho de la hoja, del lomo al fondo de los cortes (la zona que siempre es metal), promediado a lo largo de toda la hoja.
+- Pensado para **fotos reales**:
+  - cada corte se normaliza por su mediana, para compensar la luz desigual a lo largo;
+  - se usa la mediana entre cortes, que descarta los reflejos puntuales;
+  - la pendiente de la luz lateral se quita con un ajuste robusto (mínima mediana de cuadrados);
+  - cada banda tiene que superar el ruido medido en la propia foto y aparecer en más de la mitad de la hoja.
+- Las parejas **sombra + brillo** contiguas (las dos paredes de un surco iluminado de lado) se unen en un solo surco. Las bandas solo claras se proponen desactivadas, porque pueden ser un nervio o un reflejo.
+- La malla con surcos se construye directamente como sólido de «dos alturas y media», sin CSG: el STL sale **estanco por construcción**.
 
 ### Visor 3D y exportación
 - Materiales PBR (acero, latón, aluminio, bronce y PLA), `OrbitControls`, centrar vista y rotación de exhibición.
@@ -125,11 +148,13 @@ El flujo [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.y
 ├── .github/workflows/deploy-pages.yml  # Pruebas, compilación con Bun y despliegue en Pages
 ├── docs/screenshots/                   # Capturas reales (PNG)
 ├── public/
-│   ├── keyblade.js                     # Extractor de hojas: detección, medición y contorno imprimible
+│   ├── keyblade.js                     # Hojas, surcos y malla imprimible (sin dependencias)
 │   ├── sample.png                      # Foto de ejemplo (tres llaves y una anilla)
 │   └── assets/logo.png                 # Logotipo
 ├── src/styles.css                      # Entrada de Tailwind CSS
-├── tests/keyblade.test.js              # Pruebas con una foto sintética de medidas conocidas
+├── tests/keyblade.test.js              # Hojas: foto sintética con dos llaves y una anilla
+├── tests/grooves.test.js               # Surcos: fotos sintéticas con luz desigual, ruido y reflejos
+├── tests/mesh.test.js                  # Malla con surcos: estanca, bien orientada y con su volumen
 ├── index.html                          # Aplicación (UI, OpenCV.js, motor paramétrico y Three.js)
 ├── tailwind.config.js · postcss.config.js · vite.config.js
 ├── LICENSE                             # MIT
@@ -137,6 +162,15 @@ El flujo [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.y
 ```
 
 ---
+
+## Novedades de la versión 2.1: surcos laterales
+
+- **Los surcos se estiman en la foto** de la cara de la llave: posición y anchura medidas, profundidad ajustable, una o las dos caras, y cada surco se puede activar o desactivar.
+- **Malla sin CSG** para la llave con surcos: estanca por construcción. Comprobado con fotos sintéticas, con las tres llaves de la muestra y con trimesh.
+- Pruebas nuevas (`bun test`):
+  - posición de los surcos con luz desigual, ruido y reflejos, con la llave en cualquier orientación;
+  - ningún surco falso en una hoja lisa, y aviso en lugar de inventar si la hoja es demasiado pequeña;
+  - malla estanca incluso cuando un surco toca la rampa de la punta.
 
 ## Novedades de la versión 2
 
